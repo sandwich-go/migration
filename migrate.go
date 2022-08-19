@@ -14,13 +14,34 @@ import (
 )
 
 type Migration interface {
-	ShowRevision() (revision Revision, err error)
-	CurrentVersion() (version string, err error)
-
+	// Generate
+	// Generate migration file and initializes migration support for the application.
 	Generate(namespace *protokit.Namespace, dirs ...string) (err error)
-	Migrate() (revision Revision, err error)
+
+	// Migrate
+	// Create database if not exists.
+	// Generate script revision and diff from remote database for update SQL DDL.
+	Migrate(submitComment string) (revision Revision, err error)
+
+	// ShowScriptRevision
+	// Show the revision denoted by the given symbol.
+	ShowScriptRevision(version string) (revision Revision, err error)
+
+	// ShowDatabaseRevision
+	// Shows the current revision of the database.
+	ShowDatabaseRevision() (revision Revision, err error)
+
+	// Upgrade
+	// Upgrades the database.
 	Upgrade() (err error)
+
+	// Downgrade
+	// Downgrades the database.
 	Downgrade() (err error)
+
+	// History
+	// Shows the list of migrations.
+	History() (revisions []Revision, err error)
 }
 
 type migrate struct {
@@ -69,12 +90,16 @@ func (g *migrate) finish() error {
 	return nil
 }
 
-func (g *migrate) createRevisionScript() error {
+func (g *migrate) generateRevisionScript(submitComment string) error {
 	var err error
 	if err = g.prepare(); err != nil {
 		return err
 	}
-	if _, err = g.runBashCommand(flaskDbMigrate); err != nil {
+	var message string
+	if len(submitComment) > 0 {
+		message = fmt.Sprintf(`--message="%s"`, submitComment)
+	}
+	if _, err = g.runBashCommand(flaskDbMigrate, message); err != nil {
 		if !strings.Contains(err.Error(), dbNotUpToDate) {
 			return err
 		}
@@ -92,9 +117,11 @@ type Revision struct {
 	CreateDate time.Time
 }
 
-func parseRevision(s string) (Revision, error) {
+func parseRevisions(s string) ([]Revision, error) {
 	var err error
-	rev := Revision{}
+	var valid bool
+	var out []Revision
+	var index = -1
 	ss := strings.Split(s, "\n")
 	for _, str := range ss {
 		str = strings.TrimSpace(str)
@@ -102,40 +129,53 @@ func parseRevision(s string) (Revision, error) {
 			continue
 		}
 		strs := strings.SplitN(str, ":", 2)
-		if len(strs) == 1 {
-			rev.Message = strings.TrimSpace(strs[0])
-		} else {
-			switch strs[0] {
-			case "Rev":
-				rev.Rev = strings.TrimSpace(strs[1])
-			case "Parent":
-				rev.Parent = strings.TrimSpace(strs[1])
-			case "Path":
-				rev.Path = strings.TrimSpace(strs[1])
-			case "Revision ID":
-				rev.RevisionId = strings.TrimSpace(strs[1])
-			case "Revises":
-				rev.Revises = strings.TrimSpace(strs[1])
-			case "Create Date":
-				rev.CreateDate, err = time.Parse("2006-01-02 15:04:05", strings.TrimSpace(strs[1]))
-			}
+		if strs[0] == "Rev" {
+			valid = true
+			index++
+			out = append(out, Revision{})
+		}
+		if !valid {
+			continue
+		}
+		switch strs[0] {
+		case "Rev":
+			out[index].Rev = strings.TrimSpace(strs[1])
+		case "Parent":
+			out[index].Parent = strings.TrimSpace(strs[1])
+		case "Path":
+			out[index].Path = strings.TrimSpace(strs[1])
+		case "Revision ID":
+			out[index].RevisionId = strings.TrimSpace(strs[1])
+		case "Revises":
+			out[index].Revises = strings.TrimSpace(strs[1])
+		case "Create Date":
+			out[index].CreateDate, err = time.Parse("2006-01-02 15:04:05", strings.TrimSpace(strs[1]))
+		default:
+			out[index].Message = strings.TrimSpace(strs[0])
 		}
 	}
-	return rev, err
+	return out, err
 }
 
-func (g *migrate) ShowRevision() (revision Revision, err error) {
+func (g *migrate) ShowScriptRevision(version string) (revision Revision, err error) {
 	if err = g.prepare(); err != nil {
 		return
 	}
 	var showContent string
-	if showContent, err = g.runBashCommand(flaskDbShow); err != nil {
+	if showContent, err = g.runBashCommand(flaskDbShow, version); err != nil {
 		return
 	}
-	return parseRevision(showContent)
+	var revisions []Revision
+	if revisions, err = parseRevisions(showContent); err != nil {
+		return
+	}
+	if len(revisions) == 0 {
+		return
+	}
+	return revisions[0], nil
 }
 
-func (g *migrate) CurrentVersion() (revision string, err error) {
+func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	if err = g.prepare(); err != nil {
 		return
 	}
@@ -143,11 +183,14 @@ func (g *migrate) CurrentVersion() (revision string, err error) {
 	if showContent, err = g.runBashCommand(flaskDbCurrent); err != nil {
 		return
 	}
-	ss := strings.Split(strings.TrimSpace(showContent), "\n")
-	if !strings.Contains(ss[len(ss)-1], "sqlalchemy") {
-		revision = strings.TrimSpace(strings.TrimSuffix(ss[len(ss)-1], "(head)"))
+	var revisions []Revision
+	if revisions, err = parseRevisions(showContent); err != nil {
+		return
 	}
-	return
+	if len(revisions) == 0 {
+		return
+	}
+	return revisions[0], nil
 }
 
 func (g *migrate) generateUpdateDDLFile() (err error) {
@@ -155,29 +198,28 @@ func (g *migrate) generateUpdateDDLFile() (err error) {
 		return
 	}
 	// 获取远程数据库的版本号
-	var currentVersion string
-	if currentVersion, err = g.CurrentVersion(); err != nil {
+	var dbRevision, scriptRevision Revision
+	if dbRevision, err = g.ShowDatabaseRevision(); err != nil {
 		return
 	}
 	// 获取当前脚本的版本号
-	var sRevision Revision
-	if sRevision, err = g.ShowRevision(); err != nil {
+	if scriptRevision, err = g.ShowScriptRevision(""); err != nil {
 		return
 	}
-	if sRevision.RevisionId == currentVersion {
+	if scriptRevision.RevisionId == dbRevision.RevisionId {
 		// 远程数据库最新，无需生成
 		return
 	}
-	if len(currentVersion) == 0 {
-		currentVersion = emptyRevision
+	if len(dbRevision.RevisionId) == 0 {
+		dbRevision.RevisionId = emptyRevision
 	}
 	var content string
 	if content, err = g.runBashCommand(flaskDbUpgradeDDL); err != nil {
 		return
 	}
-	contents := strings.SplitN(content, sRevision.RevisionId, 2)
+	contents := strings.SplitN(content, scriptRevision.RevisionId, 2)
 	if len(contents) > 1 {
-		err = FilePutContents(filepath.Join(g.cfg.GetScriptRoot(), fmt.Sprintf("%s_%s.sql", currentVersion, sRevision.RevisionId)), []byte(strings.TrimSpace(contents[1])))
+		err = FilePutContents(filepath.Join(g.cfg.GetScriptRoot(), fmt.Sprintf("%s_%s.sql", dbRevision.RevisionId, scriptRevision.RevisionId)), []byte(strings.TrimSpace(contents[1])))
 	}
 	return
 }
@@ -274,7 +316,7 @@ func (g *migrate) createDatabaseIfNotExists() error {
 	return err
 }
 
-func (g *migrate) Migrate() (revision Revision, err error) {
+func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
 	if err = g.prepare(); err != nil {
 		return
 	}
@@ -282,11 +324,22 @@ func (g *migrate) Migrate() (revision Revision, err error) {
 	if err = g.createDatabaseIfNotExists(); err != nil {
 		return
 	}
-	if err = g.createRevisionScript(); err != nil {
+	if err = g.generateRevisionScript(submitComment); err != nil {
 		return
 	}
 	if err = g.generateUpdateDDLFile(); err != nil {
 		return
 	}
-	return g.ShowRevision()
+	return g.ShowScriptRevision("")
+}
+
+func (g *migrate) History() (revisions []Revision, err error) {
+	if err = g.prepare(); err != nil {
+		return
+	}
+	var showContent string
+	if showContent, err = g.runBashCommand(flaskDbHistory); err != nil {
+		return
+	}
+	return parseRevisions(showContent)
 }
