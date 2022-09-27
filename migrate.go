@@ -1,14 +1,20 @@
 package migration
 
 import (
-	"bitbucket.org/funplus/dbparser"
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
-	"github.com/sandwich-go/protokit"
+	"github.com/sandwich-go/boost/xos"
+	"github.com/sandwich-go/boost/xpanic"
+	"github.com/sandwich-go/boost/xproc"
+	"log"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -16,20 +22,23 @@ import (
 type Migration interface {
 	// Generate
 	// Generate migration file and initializes migration support for the application.
-	Generate(namespace *protokit.Namespace, dirs ...string) (err error)
+	Generate(opts ...GenerateConfOption) (err error)
 
 	// Migrate
 	// Create database if not exists.
 	// Generate script revision and diff from remote database for update SQL DDL.
 	Migrate(submitComment string) (revision Revision, err error)
 
-	// ShowScriptRevision
+	// ShowLocalRevision
 	// Show the revision denoted by the given symbol.
-	ShowScriptRevision(version string) (revision Revision, err error)
+	ShowLocalRevision(version string) (revision Revision, err error)
 
 	// ShowDatabaseRevision
 	// Shows the current revision of the database.
 	ShowDatabaseRevision() (revision Revision, err error)
+
+	// ShowDDL
+	ShowDDL(ddlFilePath string) (ddl string, err error)
 
 	// Upgrade
 	// Upgrades the database.
@@ -45,66 +54,174 @@ type Migration interface {
 }
 
 type migrate struct {
-	prepared bool
-	cfg      *Config
+	logger *Logger
+	conf   ConfInterface
 }
 
-func New(opts ...ConfigOption) Migration { return &migrate{cfg: NewConfig(opts...)} }
-
-func (g *migrate) runCommand(name string, args ...string) (s string, err error) {
-	return g.cfg.GetRunCommand()(name, args...)
+func New(logger *log.Logger, opts ...ConfOption) Migration {
+	return &migrate{logger: NewLogger(logger), conf: NewConf(opts...)}
 }
 
-func (g *migrate) runBashCommand(args ...string) (s string, err error) {
-	return g.runCommand("bash", append([]string{"-c"}, args...)...)
+func (g *migrate) Generate(opts ...GenerateConfOption) error {
+	g.logger.Info("generate migration python script file...")
+	conf := NewGenerateConf(opts...)
+	args := []string{
+		"migration",
+		"--dir", g.conf.GetScriptRoot(),
+		"--file_name", g.conf.GetFileName(),
+		"--db_host", conf.GetMysqlHost(),
+		"--db_port", strconv.Itoa(conf.GetMysqlPort()),
+		"--db_user", conf.GetMysqlUser(),
+		"--db_pass", conf.GetMysqlPassword(),
+		"--db_name", conf.GetMysqlDbName(),
+		"--config", conf.GetProtokitGoSettingPath(),
+		"--log_level=4",
+	}
+	var err error
+	xpanic.Try(func() {
+		_, err = xproc.Run(conf.GetProtokitPath(), xproc.WithArgs(args...))
+	}).Catch(func(err xpanic.E) {
+		err = fmt.Errorf("panic as error:%v", err)
+	})
+	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", args)
+	return err
 }
 
-func (g *migrate) getFileNameWithExt() string {
-	return fmt.Sprintf("%s.py", g.cfg.GetFileName())
+func (g *migrate) Command(name string, arg ...string) (output []byte, err error) {
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	xpanic.Try(func() {
+		cmd := exec.Command(name, arg...)
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err = cmd.Run()
+		output = stdout.Bytes()
+	}).Catch(func(err xpanic.E) {
+		err = fmt.Errorf("panic as error:%v", err)
+	})
+	if stderr.String() != "" {
+		if err != nil {
+			err = fmt.Errorf("error: %v, stderr:%s", err, stderr.String())
+		}
+	}
+	return
 }
 
 func (g *migrate) prepare() (err error) {
-	if g.prepared {
-		return
-	}
-	if _, err = g.runCommand("cd", g.cfg.GetScriptRoot()); err != nil {
+	g.logger.Info("prepare...")
+	var output []byte
+	defer func() {
+		g.logger.InfoWithFlag(err, "prepare", ", script root:", g.conf.GetScriptRoot(), ", file:", g.conf.GetFileName(), ", output:\n", string(output))
+	}()
+	err = os.Chdir(g.conf.GetScriptRoot())
+	if err != nil {
 		return err
 	}
-	if _, err = g.runBashCommand(fmt.Sprintf(exportFlaskApp, g.getFileNameWithExt())); err != nil {
+	output, err = g.Command("/bin/bash", "-c", "export", fmt.Sprintf("FLASK_APP=%s", g.conf.GetFileName()))
+	if err != nil {
 		return err
 	}
-	if _, err = g.runBashCommand(flaskDbInit); err != nil {
-		if !strings.Contains(err.Error(), migrationsAlreadyExists) {
-			return
-		}
+	output, err = g.Command("flask", "db", "init")
+	if err != nil && strings.Contains(err.Error(), migrationsAlreadyExists) {
 		err = nil
-	}
-	if err == nil {
-		g.prepared = true
 	}
 	return err
 }
 
-func (g *migrate) finish() error {
-	g.prepared = false
-	return nil
+func (g *migrate) fetchDsnFromFile() (dsn string, err error) {
+	g.logger.Info("fetch DSN from migration python script...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "fetch DSN from migration python script", ", script root:", g.conf.GetScriptRoot(), ", file:", g.conf.GetFileName(), ", dsn:", dsn)
+	}()
+	file := filepath.Join(g.conf.GetScriptRoot(), g.conf.GetFileName())
+	// 需要解析下migration.py中的`SQLALCHEMY_DATABASE_URI`
+	if !xos.ExistsFile(file) {
+		err = fmt.Errorf("not found '%s' migration python script", file)
+		return
+	}
+	var content []byte
+	content, err = xos.FileGetContents(file)
+	if err != nil {
+		return
+	}
+	reg := regexp.MustCompile(`app.config\['SQLALCHEMY_DATABASE_URI'] = '\s*(.*)\s*'`)
+	all := reg.FindAllStringSubmatch(string(content), -1)
+	if len(all) < 1 || len(all[0]) < 2 {
+		err = fmt.Errorf("invalid migration file, not found 'SQLALCHEMY_DATABASE_URI' in '%s'", file)
+		return
+	}
+	// 需要查看dsn，是否有这样的库
+	dsn = strings.TrimPrefix(all[0][1], mysqlDSNPrefix)
+	dsns := strings.Split(dsn, ":")
+	for i, j := range dsns {
+		if strings.Contains(j, "@") {
+			dsns[i] = strings.Replace(j, "@", "@tcp(", 1)
+			ss := strings.Split(dsns[i+1], "/")
+			ss[0] += ")"
+			dsns[i+1] = strings.Join(ss, "/")
+			dsn = strings.Join(dsns, ":")
+			break
+		}
+	}
+	return
 }
 
-func (g *migrate) generateRevisionScript(submitComment string) error {
-	var err error
-	if err = g.prepare(); err != nil {
+func (g *migrate) createDatabaseIfNotExists() (err error) {
+	var dsn, dbName string
+	g.logger.Info("create database if not exists...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "create database if not exists", ", dbName:", dbName)
+	}()
+	dsn, err = g.fetchDsnFromFile()
+	if err != nil {
+		return
+	}
+	var config *mysql.Config
+	if config, err = mysql.ParseDSN(dsn); err != nil {
+		return
+	}
+	dbName = config.DBName
+	config.DBName = ""
+	var mdb *sql.DB
+	if mdb, err = sql.Open("mysql", config.FormatDSN()); err != nil {
 		return err
 	}
+	_, err = mdb.ExecContext(context.Background(), fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName))
+	return
+}
+
+func (g *migrate) generateRevisionScript(submitComment string) (err error) {
+	var output []byte
+	g.logger.Info("execute flask db migrate...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "execute flask db migrate", ", output:\n", string(output))
+	}()
 	var message string
 	if len(submitComment) > 0 {
 		message = fmt.Sprintf(`--message="%s"`, submitComment)
 	}
-	if _, err = g.runBashCommand(flaskDbMigrate, message); err != nil {
-		if !strings.Contains(err.Error(), dbNotUpToDate) {
-			return err
-		}
+	output, err = g.Command("flask", "db", "migrate", message)
+	if err != nil && strings.Contains(err.Error(), dbNotUpToDate) {
+		err = nil
 	}
-	return nil
+	return
+}
+
+func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
+	err = g.prepare()
+	if err != nil {
+		return
+	}
+	// 创建远程版本库
+	err = g.createDatabaseIfNotExists()
+	if err != nil {
+		return
+	}
+	err = g.generateRevisionScript(submitComment)
+	if err != nil {
+		return
+	}
+	return g.ShowLocalRevision("")
 }
 
 type Revision struct {
@@ -115,6 +232,7 @@ type Revision struct {
 	RevisionId string
 	Revises    string
 	CreateDate time.Time
+	Content    string
 }
 
 func parseRevisions(s string) ([]Revision, error) {
@@ -132,7 +250,7 @@ func parseRevisions(s string) ([]Revision, error) {
 		if strs[0] == "Rev" {
 			valid = true
 			index++
-			out = append(out, Revision{})
+			out = append(out, Revision{Content: s})
 		}
 		if !valid {
 			continue
@@ -157,16 +275,26 @@ func parseRevisions(s string) ([]Revision, error) {
 	return out, err
 }
 
-func (g *migrate) ShowScriptRevision(version string) (revision Revision, err error) {
-	if err = g.prepare(); err != nil {
+func (g *migrate) ShowLocalRevision(version string) (revision Revision, err error) {
+	var output []byte
+	g.logger.Info("show local revision...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "show local revision", ", revision:", revision, ", output:\n", string(output))
+	}()
+	err = g.prepare()
+	if err != nil {
 		return
 	}
-	var showContent string
-	if showContent, err = g.runBashCommand(flaskDbShow, version); err != nil {
+	if len(version) > 0 {
+		output, err = g.Command("flask", "db", "show", version)
+	} else {
+		output, err = g.Command("flask", "db", "show")
+	}
+	if err != nil {
 		return
 	}
 	var revisions []Revision
-	if revisions, err = parseRevisions(showContent); err != nil {
+	if revisions, err = parseRevisions(string(output)); err != nil {
 		return
 	}
 	if len(revisions) == 0 {
@@ -176,15 +304,21 @@ func (g *migrate) ShowScriptRevision(version string) (revision Revision, err err
 }
 
 func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
-	if err = g.prepare(); err != nil {
+	var output []byte
+	g.logger.Info("show remote revision...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "show remote revision", ", revision:", revision, ", output:\n", string(output))
+	}()
+	err = g.prepare()
+	if err != nil {
 		return
 	}
-	var showContent string
-	if showContent, err = g.runBashCommand(flaskDbCurrent); err != nil {
+	output, err = g.Command("flask", "db", "current", "--verbose")
+	if err != nil {
 		return
 	}
 	var revisions []Revision
-	if revisions, err = parseRevisions(showContent); err != nil {
+	if revisions, err = parseRevisions(string(output)); err != nil {
 		return
 	}
 	if len(revisions) == 0 {
@@ -193,153 +327,102 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	return revisions[0], nil
 }
 
-func (g *migrate) generateUpdateDDLFile() (err error) {
-	if err = g.prepare(); err != nil {
+func (g *migrate) ShowDDL(ddlFilePath string) (ddl string, err error) {
+	var output []byte
+	g.logger.Info("show ddl...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "show ddl", ", output:\n", string(output))
+	}()
+	err = g.prepare()
+	if err != nil {
 		return
 	}
-	// 获取远程数据库的版本号
-	var dbRevision, scriptRevision Revision
-	if dbRevision, err = g.ShowDatabaseRevision(); err != nil {
+	output, err = g.Command("flask", "db", "upgrade", "--sql")
+	if err != nil {
 		return
 	}
-	// 获取当前脚本的版本号
-	if scriptRevision, err = g.ShowScriptRevision(""); err != nil {
-		return
+	if len(ddlFilePath) > 0 {
+		err = xos.FilePutContents(ddlFilePath, output)
 	}
-	if scriptRevision.RevisionId == dbRevision.RevisionId {
-		// 远程数据库最新，无需生成
-		return
-	}
-	if len(dbRevision.RevisionId) == 0 {
-		dbRevision.RevisionId = emptyRevision
-	}
-	var content string
-	if content, err = g.runBashCommand(flaskDbUpgradeDDL); err != nil {
-		return
-	}
-	contents := strings.SplitN(content, scriptRevision.RevisionId, 2)
-	if len(contents) > 1 {
-		err = FilePutContents(filepath.Join(g.cfg.GetScriptRoot(), fmt.Sprintf("%s_%s.sql", dbRevision.RevisionId, scriptRevision.RevisionId)), []byte(strings.TrimSpace(contents[1])))
-	}
+	ddl = string(output)
 	return
 }
 
+//func (g *migrate) generateUpdateDDLFile() (err error) {
+//	if err = g.prepare(); err != nil {
+//		return
+//	}
+//	// 获取远程数据库的版本号
+//	var dbRevision, scriptRevision Revision
+//	if dbRevision, err = g.ShowDatabaseRevision(); err != nil {
+//		return
+//	}
+//	// 获取当前脚本的版本号
+//	if scriptRevision, err = g.ShowScriptRevision(""); err != nil {
+//		return
+//	}
+//	if scriptRevision.RevisionId == dbRevision.RevisionId {
+//		// 远程数据库最新，无需生成
+//		return
+//	}
+//	if len(dbRevision.RevisionId) == 0 {
+//		dbRevision.RevisionId = emptyRevision
+//	}
+//	var content string
+//	if content, err = g.runBashCommand(flaskDbUpgradeDDL); err != nil {
+//		return
+//	}
+//	contents := strings.SplitN(content, scriptRevision.RevisionId, 2)
+//	if len(contents) > 1 {
+//		err = FilePutContents(filepath.Join(g.cfg.GetScriptRoot(), fmt.Sprintf("%s_%s.sql", dbRevision.RevisionId, scriptRevision.RevisionId)), []byte(strings.TrimSpace(contents[1])))
+//	}
+//	return
+//}
+
 func (g *migrate) Upgrade() (err error) {
-	if err = g.prepare(); err != nil {
+	var output []byte
+	g.logger.Info("upgrade...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "upgrade", ", output:\n", string(output))
+	}()
+
+	err = g.prepare()
+	if err != nil {
 		return
 	}
-	if _, err = g.runBashCommand(flaskDbUpgrade); err != nil {
-		return
-	}
+	output, err = g.Command("flask", "db", "upgrade")
 	return
 }
 
 func (g *migrate) Downgrade() (err error) {
-	if err = g.prepare(); err != nil {
+	var output []byte
+	g.logger.Info("downgrade...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "downgrade", ", output:\n", string(output))
+	}()
+
+	err = g.prepare()
+	if err != nil {
 		return
 	}
-	if _, err = g.runBashCommand(flaskDbDowngrade); err != nil {
-		return
-	}
+	output, err = g.Command("flask", "db", "downgrade")
 	return
-}
-
-func (g *migrate) Generate(namespace *protokit.Namespace, dirs ...string) error {
-	parser := dbparser.New(namespace)
-	if err := parser.Scanning(dirs...); err != nil {
-		return err
-	}
-	content, err := parser.DumpMigrateContent(fmt.Sprintf("%s%s:%s@%s:%d/%s",
-		mysqlDSNPrefix,
-		g.cfg.GetMysqlUser(),
-		g.cfg.GetMysqlPassword(),
-		g.cfg.GetMysqlHost(),
-		g.cfg.GetMysqlPort(),
-		g.cfg.GetMysqlDbName(),
-	))
-	if err != nil {
-		return err
-	}
-	return FilePutContents(filepath.Join(g.cfg.GetScriptRoot(), g.getFileNameWithExt()), []byte(content))
-}
-
-func (g *migrate) fetchDsnFromFile() (dsn string, err error) {
-	file := g.getFileNameWithExt()
-	// 需要解析下migration.py中的`SQLALCHEMY_DATABASE_URI`
-	if !fileExists(file) {
-		err = fmt.Errorf("not found '%s' migration file, need call 'GenerateMigration' function first", file)
-		return
-	}
-	var content []byte
-	content, err = FileGetContents(g.getFileNameWithExt())
-	if err != nil {
-		return
-	}
-	reg := regexp.MustCompile(`app.config\['SQLALCHEMY_DATABASE_URI'] = '\s*(.*)\s*'`)
-	all := reg.FindAllStringSubmatch(string(content), -1)
-	if len(all) < 1 || len(all[0]) < 2 {
-		err = fmt.Errorf("invalid migration file, not found 'SQLALCHEMY_DATABASE_URI' in '%s'", file)
-		return
-	}
-	// 需要查看dsn，是否有这样的库
-	dsn = strings.TrimPrefix(all[0][1], mysqlDSNPrefix)
-	dsns := strings.Split(dsn, ":")
-	for i, j := range dsns {
-		if strings.HasPrefix(j, "@") {
-			dsns[i] = strings.Replace(j, "@", "@tcp(", 1)
-			ss := strings.Split(dsns[i+1], "/")
-			ss[0] += ")"
-			dsns[i+1] = strings.Join(ss, "/")
-			dsn = strings.Join(dsns, ":")
-			break
-		}
-	}
-	return
-}
-
-func (g *migrate) createDatabaseIfNotExists() error {
-	dsn, err := g.fetchDsnFromFile()
-	if err != nil {
-		return err
-	}
-	var config *mysql.Config
-	if config, err = mysql.ParseDSN(dsn); err != nil {
-		return err
-	}
-	dbName := config.DBName
-	config.DBName = ""
-	var mdb *sql.DB
-	if mdb, err = sql.Open("mysql", config.FormatDSN()); err != nil {
-		return err
-	}
-	_, err = mdb.ExecContext(context.Background(), fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName))
-	return err
-}
-
-func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
-	if err = g.prepare(); err != nil {
-		return
-	}
-	// 创建远程版本库
-	if err = g.createDatabaseIfNotExists(); err != nil {
-		return
-	}
-	if err = g.generateRevisionScript(submitComment); err != nil {
-		return
-	}
-	if err = g.generateUpdateDDLFile(); err != nil {
-		return
-	}
-	return g.ShowScriptRevision("")
 }
 
 func (g *migrate) History() (revisions []Revision, err error) {
-	if err = g.prepare(); err != nil {
+	var output []byte
+	g.logger.Info("history...")
+	defer func() {
+		g.logger.InfoWithFlag(err, "history", ", output:\n", string(output))
+	}()
+
+	err = g.prepare()
+	if err != nil {
 		return
 	}
-	var showContent string
-	if showContent, err = g.runBashCommand(flaskDbHistory); err != nil {
+	output, err = g.Command("flask", "db", "history", "--verbose")
+	if err != nil {
 		return
 	}
-	return parseRevisions(showContent)
+	return parseRevisions(string(output))
 }
