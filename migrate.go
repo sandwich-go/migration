@@ -51,6 +51,10 @@ type Migration interface {
 	// History
 	// Shows the list of migrations.
 	History() (revisions []Revision, err error)
+
+	// Command
+	// Exec command.
+	Command(name string, arg ...string) (output []byte, err error)
 }
 
 type migrate struct {
