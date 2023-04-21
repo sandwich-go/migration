@@ -11,6 +11,7 @@ const (
 	flaskDbCurrent          = "flask db current --verbose"
 	flaskDbHistory          = "flask db history --verbose"
 	migrationsAlreadyExists = "Directory migrations already exists and is not empty"
+	migrationsAlreadyDone   = "No handlers could be found for logger"
 	dbNotUpToDate           = "Target database is not up to date"
 	mysqlDSNPrefix          = "mysql://"
 )

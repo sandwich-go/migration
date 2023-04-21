@@ -111,6 +111,35 @@ func (g *migrate) Command(name string, arg ...string) (output []byte, err error)
 	return
 }
 
+func (g *migrate) CommandWithEnv(env string, name string, arg ...string) (output []byte, err error) {
+	var stderr bytes.Buffer
+	var stdout bytes.Buffer
+	xpanic.Try(func() {
+		cmd := exec.Command(name, arg...)
+
+		if env != "" {
+			cmd.Env = append(cmd.Env, env)
+		}
+
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err = cmd.Run()
+		output = stdout.Bytes()
+	}).Catch(func(err xpanic.E) {
+		err = fmt.Errorf("panic as error:%v", err)
+	})
+	if stderr.String() != "" {
+		if err != nil {
+			err = fmt.Errorf("error: %v, stderr:%s", err, stderr.String())
+		}
+	}
+	return
+}
+
+func (g *migrate) makeFlaskAppEnv() string {
+	return fmt.Sprintf("FLASK_APP=%s", g.conf.GetFileName())
+}
+
 func (g *migrate) prepare() (err error) {
 	g.logger.Info("prepare...")
 	var output []byte
@@ -121,14 +150,14 @@ func (g *migrate) prepare() (err error) {
 	if err != nil {
 		return err
 	}
-	output, err = g.Command("/bin/bash", "-c", "export", fmt.Sprintf("FLASK_APP=%s", g.conf.GetFileName()))
-	if err != nil {
-		return err
-	}
-	output, err = g.Command("flask", "db", "init")
-	if err != nil && strings.Contains(err.Error(), migrationsAlreadyExists) {
+
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "init")
+	if err != nil &&
+		(strings.Contains(err.Error(), migrationsAlreadyExists) ||
+			strings.Contains(err.Error(), migrationsAlreadyDone)) {
 		err = nil
 	}
+
 	return err
 }
 
@@ -204,7 +233,7 @@ func (g *migrate) generateRevisionScript(submitComment string) (err error) {
 	if len(submitComment) > 0 {
 		message = fmt.Sprintf(`--message="%s"`, submitComment)
 	}
-	output, err = g.Command("flask", "db", "migrate", message)
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "migrate", message)
 	if err != nil && strings.Contains(err.Error(), dbNotUpToDate) {
 		err = nil
 	}
@@ -290,9 +319,9 @@ func (g *migrate) ShowLocalRevision(version string) (revision Revision, err erro
 		return
 	}
 	if len(version) > 0 {
-		output, err = g.Command("flask", "db", "show", version)
+		output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "show", version)
 	} else {
-		output, err = g.Command("flask", "db", "show")
+		output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "show")
 	}
 	if err != nil {
 		return
@@ -317,7 +346,7 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.Command("flask", "db", "current", "--verbose")
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "current", "--verbose")
 	if err != nil {
 		return
 	}
@@ -341,7 +370,7 @@ func (g *migrate) ShowDDL(ddlFilePath string) (ddl string, err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.Command("flask", "db", "upgrade", "--sql")
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "upgrade", "--sql")
 	if err != nil {
 		return
 	}
@@ -394,7 +423,7 @@ func (g *migrate) Upgrade() (err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.Command("flask", "db", "upgrade")
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "upgrade")
 	return
 }
 
@@ -409,7 +438,7 @@ func (g *migrate) Downgrade() (err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.Command("flask", "db", "downgrade")
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "downgrade")
 	return
 }
 
@@ -424,7 +453,7 @@ func (g *migrate) History() (revisions []Revision, err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.Command("flask", "db", "history", "--verbose")
+	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "history", "--verbose")
 	if err != nil {
 		return
 	}
