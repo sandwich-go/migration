@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	sh "github.com/codeskyblue/go-sh"
 	"github.com/go-sql-driver/mysql"
 	"github.com/sandwich-go/boost/xos"
 	"github.com/sandwich-go/boost/xpanic"
@@ -69,6 +70,21 @@ func New(logger *log.Logger, opts ...ConfOption) Migration {
 
 func (g *migrate) Generate(opts ...GenerateConfOption) error {
 	g.logger.Info("generate migration python script file...")
+	var (
+		err      error
+		commitID string
+	)
+
+	out, gitErr := sh.Command("git", "show", "-s", "--format=%h").Output()
+	if gitErr != nil {
+		return fmt.Errorf("got err:%w while git show", gitErr)
+	}
+
+	commitID = strings.TrimSpace(string(out))
+	if commitID == "" {
+		return fmt.Errorf("got err: commitID is nil")
+	}
+
 	conf := NewGenerateConf(opts...)
 	args := []string{
 		"migration",
@@ -78,11 +94,11 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 		"--db_port", strconv.Itoa(conf.GetMysqlPort()),
 		"--db_user", conf.GetMysqlUser(),
 		"--db_pass", conf.GetMysqlPassword(),
-		"--db_name", conf.GetMysqlDbName(),
+		"--db_name", fmt.Sprintf("%s_%s", conf.GetMysqlDbName(), commitID),
 		"--config", conf.GetProtokitGoSettingPath(),
 		"--log_level=4",
 	}
-	var err error
+
 	xpanic.Try(func() {
 		_, err = xproc.Run(conf.GetProtokitPath(), xproc.WithArgs(args...))
 	}).Catch(func(err xpanic.E) {
