@@ -3,6 +3,7 @@ package migration
 import "log"
 
 const (
+	warningFlag = "⚠️⚠️⚠️, waring! "
 	successFlag = "✅✅✅, success! "
 	failedFlag  = "❌❌❌, failed! "
 	logPrefix   = "[migration] "
@@ -29,4 +30,8 @@ func (l *Logger) InfoWithFlag(err error, v ...interface{}) {
 	} else {
 		l.Logger.Println(append([]interface{}{logPrefix, successFlag}, v...)...)
 	}
+}
+
+func (l *Logger) WarnWithFlag(v ...interface{}) {
+	l.Logger.Println(append([]interface{}{logPrefix, warningFlag}, v...)...)
 }

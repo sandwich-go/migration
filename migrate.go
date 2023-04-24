@@ -10,7 +10,6 @@ import (
 	"github.com/sandwich-go/boost/xos"
 	"github.com/sandwich-go/boost/xpanic"
 	"github.com/sandwich-go/boost/xproc"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -171,24 +170,11 @@ func (g *migrate) prepare() (err error) {
 	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "init")
 	if err != nil {
 		if strings.Contains(err.Error(), migrationsAlreadyExists) {
+			g.logger.WarnWithFlag(migrationsAlreadyExists)
 			err = nil
 		} else if strings.Contains(err.Error(), migrationsAlreadyDone) {
-			// 清理空的migrations目录
-			var (
-				migrationsDirName = "migrations"
-				migrationsDir     = filepath.Join(g.conf.GetScriptRoot(), migrationsDirName)
-			)
-
-			dir, direrr := ioutil.ReadDir(migrationsDir)
-			if direrr != nil {
-				err = direrr
-			} else {
-				if len(dir) == 0 {
-					_ = os.RemoveAll(migrationsDir)
-				}
-
-				err = nil
-			}
+			g.logger.WarnWithFlag(migrationsAlreadyDone)
+			err = nil
 		}
 	}
 
