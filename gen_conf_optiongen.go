@@ -12,6 +12,7 @@ import (
 type Conf struct {
 	FileName   string `xconf:"file_name" usage:"migration 脚本名"`
 	ScriptRoot string `xconf:"script_root" usage:"migration 脚本根路径"`
+	CommitID   string `xconf:"commit_id" usage:"migration dir 脚本目录名"`
 }
 
 // NewConf new Conf
@@ -59,6 +60,15 @@ func WithScriptRoot(v string) ConfOption {
 	}
 }
 
+// WithCommitID migration dir 脚本目录名
+func WithCommitID(v string) ConfOption {
+	return func(cc *Conf) ConfOption {
+		previous := cc.CommitID
+		cc.CommitID = v
+		return WithCommitID(previous)
+	}
+}
+
 // InstallConfWatchDog the installed func will called when NewConf  called
 func InstallConfWatchDog(dog func(cc *Conf)) { watchDogConf = dog }
 
@@ -72,6 +82,7 @@ func newDefaultConf() *Conf {
 	for _, opt := range [...]ConfOption{
 		WithFileName("migration"),
 		WithScriptRoot("."),
+		WithCommitID(""),
 	} {
 		opt(cc)
 	}
@@ -119,11 +130,13 @@ func AtomicConf() ConfVisitor {
 // all getter func
 func (cc *Conf) GetFileName() string   { return cc.FileName }
 func (cc *Conf) GetScriptRoot() string { return cc.ScriptRoot }
+func (cc *Conf) GetCommitID() string   { return cc.CommitID }
 
 // ConfVisitor visitor interface for Conf
 type ConfVisitor interface {
 	GetFileName() string
 	GetScriptRoot() string
+	GetCommitID() string
 }
 
 // ConfInterface visitor + ApplyOption interface for Conf

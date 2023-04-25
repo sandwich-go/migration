@@ -5,6 +5,7 @@ func ConfOptionDeclareWithDefault() interface{} {
 	return map[string]interface{}{
 		"FileName":   "migration", // @MethodComment(migration 脚本名)
 		"ScriptRoot": ".",         // @MethodComment(migration 脚本根路径)
+		"CommitID":   "",          // @MethodComment(migration dir 脚本目录名)
 	}
 }
 

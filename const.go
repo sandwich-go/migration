@@ -13,5 +13,6 @@ const (
 	migrationsAlreadyExists = "Directory migrations already exists and is not empty"
 	migrationsAlreadyDone   = "No handlers could be found for logger"
 	dbNotUpToDate           = "Target database is not up to date"
+	SchemaNoChanges         = "No changes in schema detected"
 	mysqlDSNPrefix          = "mysql://"
 )

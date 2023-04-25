@@ -39,7 +39,9 @@ type Migration interface {
 	ShowDatabaseRevision() (revision Revision, err error)
 
 	// ShowDDL
-	ShowDDL(ddlFilePath string) (ddl string, err error)
+	// Use The --sql option present in several commands performs an ‘offline’ mode migration.
+	// Instead of executing the database commands the SQL statements that need to be executed are printed to the console.
+	ShowDDL(ddlFileName string) (ddl string, err error)
 
 	// Upgrade
 	// Upgrades the database.
@@ -55,7 +57,7 @@ type Migration interface {
 
 	// Command
 	// Exec command.
-	Command(name string, arg ...string) (output []byte, err error)
+	Command(env string, name string, arg ...string) (output []byte, err error)
 }
 
 type migrate struct {
@@ -67,33 +69,77 @@ func New(logger *log.Logger, opts ...ConfOption) Migration {
 	return &migrate{logger: NewLogger(logger), conf: NewConf(opts...)}
 }
 
-func (g *migrate) Generate(opts ...GenerateConfOption) error {
-	g.logger.Info("generate migration python script file...")
-	var (
-		err      error
-		commitID string
-	)
+func (g *migrate) flaskEnv() string {
+	return fmt.Sprintf("FLASK_APP=%s", g.conf.GetFileName())
+}
+
+func (g *migrate) commitID(path string) (commitID string, err error) {
+	deferFunc, chdirErr := Chdir(path)
+	defer deferFunc()
+
+	if chdirErr != nil {
+		err = chdirErr
+		return
+	}
 
 	out, gitErr := sh.Command("git", "show", "-s", "--format=%h").Output()
 	if gitErr != nil {
-		return fmt.Errorf("got err:%w while git show", gitErr)
+		err = fmt.Errorf("got err:%w while git show", gitErr)
+		return
 	}
 
 	commitID = strings.TrimSpace(string(out))
 	if commitID == "" {
-		return fmt.Errorf("got err: commitID is nil")
+		err = fmt.Errorf("can not got commitID, path: %s", path)
+		return
+	}
+
+	return
+}
+
+func (g *migrate) migrationEnv() (migrationBuildDir, confCommitID string, err error) {
+	_, err = os.Stat(g.conf.GetScriptRoot())
+	if err != nil {
+		if os.IsNotExist(err) {
+			err0 := os.Mkdir(g.conf.GetScriptRoot(), os.ModePerm)
+			if err0 != nil {
+				err = err0
+				return
+			}
+		} else {
+			return
+		}
+	}
+
+	if g.conf.GetCommitID() != "" {
+		confCommitID = g.conf.GetCommitID()
+	} else {
+		confCommitID, err = g.commitID(g.conf.GetScriptRoot())
+		if err != nil {
+			return
+		}
+	}
+
+	return filepath.Join(g.conf.GetScriptRoot(), confCommitID), confCommitID, nil
+}
+
+func (g *migrate) Generate(opts ...GenerateConfOption) error {
+	g.logger.Info("generate migration python script file...")
+	migrationBuildDir, confCommitID, err := g.migrationEnv()
+	if err != nil {
+		return err
 	}
 
 	conf := NewGenerateConf(opts...)
 	args := []string{
 		"migration",
-		"--dir", g.conf.GetScriptRoot(),
+		"--dir", migrationBuildDir,
 		"--file_name", g.conf.GetFileName(),
 		"--db_host", conf.GetMysqlHost(),
 		"--db_port", strconv.Itoa(conf.GetMysqlPort()),
 		"--db_user", conf.GetMysqlUser(),
 		"--db_pass", conf.GetMysqlPassword(),
-		"--db_name", fmt.Sprintf("%s_%s", conf.GetMysqlDbName(), commitID),
+		"--db_name", fmt.Sprintf("%s_%s", conf.GetMysqlDbName(), confCommitID),
 		"--config", conf.GetProtokitGoSettingPath(),
 		"--log_level=4",
 	}
@@ -107,27 +153,7 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 	return err
 }
 
-func (g *migrate) Command(name string, arg ...string) (output []byte, err error) {
-	var stderr bytes.Buffer
-	var stdout bytes.Buffer
-	xpanic.Try(func() {
-		cmd := exec.Command(name, arg...)
-		cmd.Stdout = &stdout
-		cmd.Stderr = &stderr
-		err = cmd.Run()
-		output = stdout.Bytes()
-	}).Catch(func(err xpanic.E) {
-		err = fmt.Errorf("panic as error:%v", err)
-	})
-	if stderr.String() != "" {
-		if err != nil {
-			err = fmt.Errorf("error: %v, stderr:%s", err, stderr.String())
-		}
-	}
-	return
-}
-
-func (g *migrate) CommandWithEnv(env string, name string, arg ...string) (output []byte, err error) {
+func (g *migrate) Command(env string, name string, arg ...string) (output []byte, err error) {
 	var stderr bytes.Buffer
 	var stdout bytes.Buffer
 	xpanic.Try(func() {
@@ -152,22 +178,28 @@ func (g *migrate) CommandWithEnv(env string, name string, arg ...string) (output
 	return
 }
 
-func (g *migrate) makeFlaskAppEnv() string {
-	return fmt.Sprintf("FLASK_APP=%s", g.conf.GetFileName())
-}
-
 func (g *migrate) prepare() (err error) {
 	g.logger.Info("prepare...")
-	var output []byte
+	var (
+		output []byte
+		dir    string
+	)
+
 	defer func() {
-		g.logger.InfoWithFlag(err, "prepare", ", script root:", g.conf.GetScriptRoot(), ", file:", g.conf.GetFileName(), ", output:\n", string(output))
+		g.logger.InfoWithFlag(err, "prepare", ", dir:", dir, ", file:", g.conf.GetFileName(), ", output:\n", string(output))
 	}()
-	err = os.Chdir(g.conf.GetScriptRoot())
+
+	dir, _, err = g.migrationEnv()
 	if err != nil {
 		return err
 	}
 
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "init")
+	err = os.Chdir(dir)
+	if err != nil {
+		return err
+	}
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "init")
 	if err != nil {
 		if strings.Contains(err.Error(), migrationsAlreadyExists) {
 			g.logger.WarnWithFlag(migrationsAlreadyExists)
@@ -183,26 +215,37 @@ func (g *migrate) prepare() (err error) {
 
 func (g *migrate) fetchDsnFromFile() (dsn string, err error) {
 	g.logger.Info("fetch DSN from migration python script...")
+	var migrationBuildDir string
 	defer func() {
-		g.logger.InfoWithFlag(err, "fetch DSN from migration python script", ", script root:", g.conf.GetScriptRoot(), ", file:", g.conf.GetFileName(), ", dsn:", dsn)
+		g.logger.InfoWithFlag(err, "fetch DSN from migration python script", ", migrationBuildDir:", migrationBuildDir, ", file:", g.conf.GetFileName(), ", dsn:", dsn)
 	}()
-	file := filepath.Join(g.conf.GetScriptRoot(), g.conf.GetFileName())
+
+	migrationBuildDir, _, err = g.migrationEnv()
+	if err != nil {
+		return
+	}
+
+	file := filepath.Join(migrationBuildDir, g.conf.GetFileName())
+
 	// 需要解析下migration.py中的`SQLALCHEMY_DATABASE_URI`
 	if !xos.ExistsFile(file) {
 		err = fmt.Errorf("not found '%s' migration python script", file)
 		return
 	}
+
 	var content []byte
 	content, err = xos.FileGetContents(file)
 	if err != nil {
 		return
 	}
+
 	reg := regexp.MustCompile(`app.config\['SQLALCHEMY_DATABASE_URI'] = '\s*(.*)\s*'`)
 	all := reg.FindAllStringSubmatch(string(content), -1)
 	if len(all) < 1 || len(all[0]) < 2 {
 		err = fmt.Errorf("invalid migration file, not found 'SQLALCHEMY_DATABASE_URI' in '%s'", file)
 		return
 	}
+
 	// 需要查看dsn，是否有这样的库
 	dsn = strings.TrimPrefix(all[0][1], mysqlDSNPrefix)
 	dsns := strings.Split(dsn, ":")
@@ -216,47 +259,61 @@ func (g *migrate) fetchDsnFromFile() (dsn string, err error) {
 			break
 		}
 	}
+
 	return
 }
 
 func (g *migrate) createDatabaseIfNotExists() (err error) {
-	var dsn, dbName string
 	g.logger.Info("create database if not exists...")
+	var dsn, dbName string
 	defer func() {
 		g.logger.InfoWithFlag(err, "create database if not exists", ", dbName:", dbName)
 	}()
+
 	dsn, err = g.fetchDsnFromFile()
 	if err != nil {
 		return
 	}
+
 	var config *mysql.Config
 	if config, err = mysql.ParseDSN(dsn); err != nil {
 		return
 	}
 	dbName = config.DBName
 	config.DBName = ""
+
 	var mdb *sql.DB
 	if mdb, err = sql.Open("mysql", config.FormatDSN()); err != nil {
 		return err
 	}
 	_, err = mdb.ExecContext(context.Background(), fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName))
+
 	return
 }
 
 func (g *migrate) generateRevisionScript(submitComment string) (err error) {
-	var output []byte
 	g.logger.Info("execute flask db migrate...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "execute flask db migrate", ", output:\n", string(output))
 	}()
+
 	var message string
 	if len(submitComment) > 0 {
 		message = fmt.Sprintf(`--message="%s"`, submitComment)
 	}
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "migrate", message)
-	if err != nil && strings.Contains(err.Error(), dbNotUpToDate) {
-		err = nil
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "migrate", message)
+	if err != nil {
+		if strings.Contains(err.Error(), dbNotUpToDate) {
+			g.logger.WarnWithFlag(dbNotUpToDate)
+			err = nil
+		} else if strings.Contains(err.Error(), SchemaNoChanges) {
+			g.logger.WarnWithFlag(SchemaNoChanges)
+			err = nil
+		}
 	}
+
 	return
 }
 
@@ -329,23 +386,26 @@ func parseRevisions(s string) ([]Revision, error) {
 }
 
 func (g *migrate) ShowLocalRevision(version string) (revision Revision, err error) {
-	var output []byte
 	g.logger.Info("show local revision...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "show local revision", ", revision:", revision, ", output:\n", string(output))
 	}()
+
 	err = g.prepare()
 	if err != nil {
 		return
 	}
+
 	if len(version) > 0 {
-		output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "show", version)
+		output, err = g.Command(g.flaskEnv(), "flask", "db", "show", version)
 	} else {
-		output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "show")
+		output, err = g.Command(g.flaskEnv(), "flask", "db", "show")
 	}
 	if err != nil {
 		return
 	}
+
 	var revisions []Revision
 	if revisions, err = parseRevisions(string(output)); err != nil {
 		return
@@ -357,19 +417,22 @@ func (g *migrate) ShowLocalRevision(version string) (revision Revision, err erro
 }
 
 func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
-	var output []byte
 	g.logger.Info("show remote revision...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "show remote revision", ", revision:", revision, ", output:\n", string(output))
 	}()
+
 	err = g.prepare()
 	if err != nil {
 		return
 	}
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "current", "--verbose")
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "current", "--verbose")
 	if err != nil {
 		return
 	}
+
 	var revisions []Revision
 	if revisions, err = parseRevisions(string(output)); err != nil {
 		return
@@ -380,61 +443,40 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	return revisions[0], nil
 }
 
-func (g *migrate) ShowDDL(ddlFilePath string) (ddl string, err error) {
-	var output []byte
+func (g *migrate) ShowDDL(ddlFileName string) (ddl string, err error) {
 	g.logger.Info("show ddl...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "show ddl", ", output:\n", string(output))
 	}()
+
 	err = g.prepare()
 	if err != nil {
 		return
 	}
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "upgrade", "--sql")
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "upgrade", "--sql")
 	if err != nil {
 		return
 	}
-	if len(ddlFilePath) > 0 {
-		err = xos.FilePutContents(ddlFilePath, output)
+
+	var migrationBuildDir string
+	migrationBuildDir, _, err = g.migrationEnv()
+	if err != nil {
+		return
+	}
+
+	if len(ddlFileName) > 0 {
+		err = xos.FilePutContents(filepath.Join(migrationBuildDir, ddlFileName), output)
 	}
 	ddl = string(output)
+
 	return
 }
 
-//func (g *migrate) generateUpdateDDLFile() (err error) {
-//	if err = g.prepare(); err != nil {
-//		return
-//	}
-//	// 获取远程数据库的版本号
-//	var dbRevision, scriptRevision Revision
-//	if dbRevision, err = g.ShowDatabaseRevision(); err != nil {
-//		return
-//	}
-//	// 获取当前脚本的版本号
-//	if scriptRevision, err = g.ShowScriptRevision(""); err != nil {
-//		return
-//	}
-//	if scriptRevision.RevisionId == dbRevision.RevisionId {
-//		// 远程数据库最新，无需生成
-//		return
-//	}
-//	if len(dbRevision.RevisionId) == 0 {
-//		dbRevision.RevisionId = emptyRevision
-//	}
-//	var content string
-//	if content, err = g.runBashCommand(flaskDbUpgradeDDL); err != nil {
-//		return
-//	}
-//	contents := strings.SplitN(content, scriptRevision.RevisionId, 2)
-//	if len(contents) > 1 {
-//		err = FilePutContents(filepath.Join(g.cfg.GetScriptRoot(), fmt.Sprintf("%s_%s.sql", dbRevision.RevisionId, scriptRevision.RevisionId)), []byte(strings.TrimSpace(contents[1])))
-//	}
-//	return
-//}
-
 func (g *migrate) Upgrade() (err error) {
-	var output []byte
 	g.logger.Info("upgrade...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "upgrade", ", output:\n", string(output))
 	}()
@@ -443,13 +485,15 @@ func (g *migrate) Upgrade() (err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "upgrade")
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "upgrade")
+
 	return
 }
 
 func (g *migrate) Downgrade() (err error) {
-	var output []byte
 	g.logger.Info("downgrade...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "downgrade", ", output:\n", string(output))
 	}()
@@ -458,13 +502,15 @@ func (g *migrate) Downgrade() (err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "downgrade")
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "downgrade")
+
 	return
 }
 
 func (g *migrate) History() (revisions []Revision, err error) {
-	var output []byte
 	g.logger.Info("history...")
+	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "history", ", output:\n", string(output))
 	}()
@@ -473,9 +519,11 @@ func (g *migrate) History() (revisions []Revision, err error) {
 	if err != nil {
 		return
 	}
-	output, err = g.CommandWithEnv(g.makeFlaskAppEnv(), "flask", "db", "history", "--verbose")
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "history", "--verbose")
 	if err != nil {
 		return
 	}
+
 	return parseRevisions(string(output))
 }
