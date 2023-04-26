@@ -12,7 +12,8 @@ import (
 type Conf struct {
 	FileName   string `xconf:"file_name" usage:"migration 脚本名"`
 	ScriptRoot string `xconf:"script_root" usage:"migration 脚本根路径"`
-	CommitID   string `xconf:"commit_id" usage:"migration dir 脚本目录名"`
+	CommitID   string `xconf:"commit_id" usage:"repo commitID"`
+	DBName     string `xconf:"db_name" usage:"migration 本地迁移库名"`
 }
 
 // NewConf new Conf
@@ -60,12 +61,21 @@ func WithScriptRoot(v string) ConfOption {
 	}
 }
 
-// WithCommitID migration dir 脚本目录名
+// WithCommitID repo commitID
 func WithCommitID(v string) ConfOption {
 	return func(cc *Conf) ConfOption {
 		previous := cc.CommitID
 		cc.CommitID = v
 		return WithCommitID(previous)
+	}
+}
+
+// WithDBName migration 本地迁移库名
+func WithDBName(v string) ConfOption {
+	return func(cc *Conf) ConfOption {
+		previous := cc.DBName
+		cc.DBName = v
+		return WithDBName(previous)
 	}
 }
 
@@ -83,6 +93,7 @@ func newDefaultConf() *Conf {
 		WithFileName("migration"),
 		WithScriptRoot("."),
 		WithCommitID(""),
+		WithDBName(""),
 	} {
 		opt(cc)
 	}
@@ -131,12 +142,14 @@ func AtomicConf() ConfVisitor {
 func (cc *Conf) GetFileName() string   { return cc.FileName }
 func (cc *Conf) GetScriptRoot() string { return cc.ScriptRoot }
 func (cc *Conf) GetCommitID() string   { return cc.CommitID }
+func (cc *Conf) GetDBName() string     { return cc.DBName }
 
 // ConfVisitor visitor interface for Conf
 type ConfVisitor interface {
 	GetFileName() string
 	GetScriptRoot() string
 	GetCommitID() string
+	GetDBName() string
 }
 
 // ConfInterface visitor + ApplyOption interface for Conf
