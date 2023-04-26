@@ -341,7 +341,7 @@ type Revision struct {
 	Message    string
 	RevisionId string
 	Revises    string
-	CreateDate time.Time
+	CreateDate string
 	Content    string
 }
 
@@ -377,7 +377,10 @@ func parseRevisions(s string) ([]Revision, error) {
 		case "Revises":
 			out[index].Revises = strings.TrimSpace(strs[1])
 		case "Create Date":
-			out[index].CreateDate, err = time.Parse("2006-01-02 15:04:05", strings.TrimSpace(strs[1]))
+			source := strings.TrimSpace(strs[1])
+			var target time.Time
+			target, err = time.Parse("2006-01-02 15:04:05.999999", source)
+			out[index].CreateDate = target.Format("2006-01-02 15:04:05")
 		default:
 			out[index].Message = strings.TrimSpace(strs[0])
 		}
