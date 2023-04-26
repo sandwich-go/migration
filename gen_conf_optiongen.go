@@ -13,7 +13,6 @@ type Conf struct {
 	FileName   string `xconf:"file_name" usage:"migration 脚本名"`
 	ScriptRoot string `xconf:"script_root" usage:"migration 脚本根路径"`
 	CommitID   string `xconf:"commit_id" usage:"repo commitID"`
-	DBName     string `xconf:"db_name" usage:"migration 本地迁移库名"`
 }
 
 // NewConf new Conf
@@ -70,15 +69,6 @@ func WithCommitID(v string) ConfOption {
 	}
 }
 
-// WithDBName migration 本地迁移库名
-func WithDBName(v string) ConfOption {
-	return func(cc *Conf) ConfOption {
-		previous := cc.DBName
-		cc.DBName = v
-		return WithDBName(previous)
-	}
-}
-
 // InstallConfWatchDog the installed func will called when NewConf  called
 func InstallConfWatchDog(dog func(cc *Conf)) { watchDogConf = dog }
 
@@ -93,7 +83,6 @@ func newDefaultConf() *Conf {
 		WithFileName("migration"),
 		WithScriptRoot("."),
 		WithCommitID(""),
-		WithDBName(""),
 	} {
 		opt(cc)
 	}
@@ -142,14 +131,12 @@ func AtomicConf() ConfVisitor {
 func (cc *Conf) GetFileName() string   { return cc.FileName }
 func (cc *Conf) GetScriptRoot() string { return cc.ScriptRoot }
 func (cc *Conf) GetCommitID() string   { return cc.CommitID }
-func (cc *Conf) GetDBName() string     { return cc.DBName }
 
 // ConfVisitor visitor interface for Conf
 type ConfVisitor interface {
 	GetFileName() string
 	GetScriptRoot() string
 	GetCommitID() string
-	GetDBName() string
 }
 
 // ConfInterface visitor + ApplyOption interface for Conf

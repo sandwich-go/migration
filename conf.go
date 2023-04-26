@@ -6,7 +6,6 @@ func ConfOptionDeclareWithDefault() interface{} {
 		"FileName":   "migration", // @MethodComment(migration 脚本名)
 		"ScriptRoot": ".",         // @MethodComment(migration 脚本根路径)
 		"CommitID":   "",          // @MethodComment(repo commitID)
-		"DBName":     "",          // @MethodComment(migration 本地迁移库名)
 	}
 }
 
