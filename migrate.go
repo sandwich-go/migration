@@ -178,7 +178,7 @@ func (g *migrate) Command(env string, name string, arg ...string) (output []byte
 	return
 }
 
-func (g *migrate) prepare() (err error) {
+func (g *migrate) prepare(needInit bool) (err error) {
 	g.logger.Info("prepare...")
 	var (
 		output []byte
@@ -199,14 +199,16 @@ func (g *migrate) prepare() (err error) {
 		return err
 	}
 
-	output, err = g.Command(g.flaskEnv(), "flask", "db", "init")
-	if err != nil {
-		if strings.Contains(err.Error(), migrationsAlreadyExists) {
-			g.logger.WarnWithFlag(migrationsAlreadyExists)
-			err = nil
-		} else if strings.Contains(err.Error(), migrationsAlreadyDone) {
-			g.logger.WarnWithFlag(migrationsAlreadyDone)
-			err = nil
+	if needInit {
+		output, err = g.Command(g.flaskEnv(), "flask", "db", "init")
+		if err != nil {
+			if strings.Contains(err.Error(), migrationsAlreadyExists) {
+				g.logger.WarnWithFlag(migrationsAlreadyExists)
+				err = nil
+			} else if strings.Contains(err.Error(), migrationsAlreadyDone) {
+				g.logger.WarnWithFlag(migrationsAlreadyDone)
+				err = nil
+			}
 		}
 	}
 
@@ -318,7 +320,7 @@ func (g *migrate) generateRevisionScript(submitComment string) (err error) {
 }
 
 func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
-	err = g.prepare()
+	err = g.prepare(true)
 	if err != nil {
 		return
 	}
@@ -395,7 +397,7 @@ func (g *migrate) ShowLocalRevision(version string) (revision Revision, err erro
 		g.logger.InfoWithFlag(err, "show local revision", ", revision:", revision, ", output:\n", string(output))
 	}()
 
-	err = g.prepare()
+	err = g.prepare(false)
 	if err != nil {
 		return
 	}
@@ -426,7 +428,7 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 		g.logger.InfoWithFlag(err, "show remote revision", ", revision:", revision, ", output:\n", string(output))
 	}()
 
-	err = g.prepare()
+	err = g.prepare(false)
 	if err != nil {
 		return
 	}
@@ -453,7 +455,7 @@ func (g *migrate) ShowDDL(ddlFileName string) (ddl string, err error) {
 		g.logger.InfoWithFlag(err, "show ddl", ", output:\n", string(output))
 	}()
 
-	err = g.prepare()
+	err = g.prepare(false)
 	if err != nil {
 		return
 	}
@@ -484,7 +486,7 @@ func (g *migrate) Upgrade() (err error) {
 		g.logger.InfoWithFlag(err, "upgrade", ", output:\n", string(output))
 	}()
 
-	err = g.prepare()
+	err = g.prepare(false)
 	if err != nil {
 		return
 	}
@@ -501,7 +503,7 @@ func (g *migrate) Downgrade() (err error) {
 		g.logger.InfoWithFlag(err, "downgrade", ", output:\n", string(output))
 	}()
 
-	err = g.prepare()
+	err = g.prepare(false)
 	if err != nil {
 		return
 	}
@@ -518,7 +520,7 @@ func (g *migrate) History() (revisions []Revision, err error) {
 		g.logger.InfoWithFlag(err, "history", ", output:\n", string(output))
 	}()
 
-	err = g.prepare()
+	err = g.prepare(false)
 	if err != nil {
 		return
 	}
