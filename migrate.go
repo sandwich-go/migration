@@ -29,6 +29,10 @@ type Migration interface {
 	// Generate script revision and diff from remote database for update SQL DDL.
 	Migrate(submitComment string) (revision Revision, err error)
 
+	// MigrateOnly
+	// "flask db migrate" only
+	MigrateOnly(submitComment string) (err error)
+
 	// ShowLocalRevision
 	// Show the revision denoted by the given symbol.
 	ShowLocalRevision(version string) (revision Revision, err error)
@@ -261,6 +265,14 @@ func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
 		return
 	}
 	return g.ShowLocalRevision("")
+}
+
+func (g *migrate) MigrateOnly(submitComment string) (err error) {
+	err = g.prepare()
+	if err != nil {
+		return
+	}
+	return g.generateRevisionScript(submitComment)
 }
 
 type Revision struct {
