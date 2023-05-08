@@ -44,7 +44,10 @@ type Migration interface {
 	// ShowDDL
 	// Use The --sql option present in several commands performs an ‘offline’ mode migration.
 	// Instead of executing the database commands the SQL statements that need to be executed are printed to the console.
-	ShowDDL(ddlFileName string) (ddl string, err error)
+	// params:
+	// ddlFileName - The name of the generated ddl file
+	// latest      -  Write only the latest version of the update to the ddl file
+	ShowDDL(ddlFileName string, latest bool) (ddl string, err error)
 
 	// Upgrade
 	// Upgrades the database.
@@ -387,7 +390,7 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	return revisions[0], nil
 }
 
-func (g *migrate) ShowDDL(ddlFileName string) (ddl string, err error) {
+func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err error) {
 	g.logger.Info("show ddl...")
 	var output []byte
 	defer func() {
@@ -403,9 +406,39 @@ func (g *migrate) ShowDDL(ddlFileName string) (ddl string, err error) {
 	}
 	var migrationBuildDir = g.migrationBuildDir()
 	if len(ddlFileName) > 0 {
+		if latest {
+			output, err = g.generateUpdateDDLFile(output)
+			if err != nil {
+				return
+			}
+		}
 		err = xos.FilePutContents(filepath.Join(migrationBuildDir, ddlFileName), output)
 	}
 	ddl = string(output)
+	return
+}
+
+func (g *migrate) generateUpdateDDLFile(content []byte) (updateContent []byte, err error) {
+	if err = g.prepare(); err != nil {
+		return
+	}
+	// 获取远程数据库的版本号
+	var dbRevision, scriptRevision Revision
+	if dbRevision, err = g.ShowDatabaseRevision(); err != nil {
+		return
+	}
+	// 获取当前脚本的版本号
+	if scriptRevision, err = g.ShowLocalRevision(""); err != nil {
+		return
+	}
+	if scriptRevision.RevisionId == dbRevision.RevisionId {
+		// 远程数据库最新，无需生成
+		return
+	}
+	contents := strings.SplitN(string(content), scriptRevision.RevisionId, 2)
+	if len(contents) > 1 {
+		updateContent = []byte(contents[1])
+	}
 	return
 }
 
