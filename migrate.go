@@ -406,13 +406,21 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err erro
 	}
 	var migrationBuildDir = g.migrationBuildDir()
 	if len(ddlFileName) > 0 {
+		filePath := filepath.Join(migrationBuildDir, ddlFileName)
 		if latest {
 			output, err = g.generateUpdateDDLFile(output)
 			if err != nil {
 				return
 			}
+			output, err = g.deleteAlembicVersionUpdateContent(output)
+			if err != nil {
+				return
+			}
 		}
-		err = xos.FilePutContents(filepath.Join(migrationBuildDir, ddlFileName), output)
+		err = xos.FilePutContents(filePath, output)
+		if err != nil {
+			return
+		}
 	}
 	ddl = string(output)
 	return
@@ -440,6 +448,20 @@ func (g *migrate) generateUpdateDDLFile(content []byte) (updateContent []byte, e
 		updateContent = []byte(contents[1])
 	}
 	return
+}
+
+func (g *migrate) deleteAlembicVersionUpdateContent(content []byte) (ddlContent []byte, err error) {
+	c := strings.TrimSpace(string(content))
+	cs := strings.Split(c, ";")
+	var contentAfterReplaced string
+	for i := len(cs) - 1; i >= 0; i-- {
+		checkContent := cs[i]
+		if strings.Contains(checkContent, updateAlembicVersionPerfix) {
+			contentAfterReplaced = strings.Replace(c, checkContent, "", -1)
+			break
+		}
+	}
+	return []byte(contentAfterReplaced), nil
 }
 
 func (g *migrate) Upgrade() (err error) {
