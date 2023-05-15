@@ -1,91 +1,64 @@
-name:                               # 项目名称，一般为 GIT 里的 REPO 名
-short_name:                         # productName,默认是 name 参数
-version_short_path:                 # version.gen.go, 项目的当前 TAG 版本文件，如果有，bump 子命令会将 TAG 版本号写入该文件中
-make_step:                          # 发布版本的子命令步骤，严格按指定顺序执行，子命令有 bump、clog、build、upload、docker，默认 bump、clog
+name: migration #bitbucket里的repo名
+
+make_step: #定制make操作步骤,选项有以下几种，默认bump+clog,多选项按顺序执行
   - bump
   - clog
-lifestyle_step:                     # 自定义执行脚本，参数为 curr_version ，命令规范：before_{子命令}、after_{子命令}，例如：
-                                    # - after_upload: update_install.sh （在 upload 之后执行 update_install.sh 脚本）
-latest_version_name: Unreleased     # 最新未发布的版本名称
-issue_uri_format:                   # CHANGELOG 日志文件中 ISSUE 地址格式，格式参数为 ISSUE 编号， 例如 https://bitbucket.org/funplus/devcenter-issues/issues/%s
-commit_uri_format:                  # commit 格式地址，格式参数分别为 name, commit_id ，例如 https://bitbucket.org/funplus/%s/commits/%s
-commit_replace:                     # commit 信息替换，替换一些关键的但是书写错误的 commit message ，例如:
-                                    # - 4fbb89ae: "test: just test commit replace"
-commit_with_author_at_date: true    # commit信息中是否包含作者、日期
-short_hash_len: 7                   # commit id 长度
-sem_pre_release_version:            # 支持的 pre release sem version 标记，默认是alpha、beta,顺序按照 semver 标准，否则需要需要指定 sem_pre_order_by_config 为 true
+
+lifestyle_step: #自定义执行脚本,参数为curr_version,命令规范：before/after_step
+# - after_release: update_install.sh # 在release之后执行
+
+latest_version_name: Unreleased # 最新未发布的版本名称
+commit_filters: # commit过滤器
+  - all
+version_name_with_date: true # version名称是否包含日期
+version_name_with_author: true # version名称是否包含创建者
+issue_uri_format: https://bitbucket.org/funplus/devcenter-issues/issues/%s # issue地址
+commit_uri_format: https://bitbucket.org/funplus/%s/commits/%s # commit地址,name,commit_id
+merge_duplicate_commit: true # 是否合并commit相同的提交
+commit_with_author_at_date: true # commit信息中是否包含作者、日期
+short_hash_len: 7 # commit id长度
+issue_prefix: # issue前缀 #71
+  - #
+sem_pre_release_version: # 支持的pre release sem version标记
   - alpha
   - beta
-sem_pre_order_by_config: false       # pre release 是否按照 semver 规则排序，默认false，false 时按照 sem_pre_release_version 配置序
-sem_initial_version: v0.0.1         # 初始版本号
-sem_master_branch_name: master      # 主分支名称，默认为 master ，注意的是在 github 上需要修改为 main
-sem_version_branch_prefix: version/  # version 版本开发分支名称前缀
-sem_initial_branch: 0.1             # 初始的分支版本
-release_docker_hub:                 # CHANGELOG 文件中 docker 镜像文件的下载地址格式，例如：
-                                    # - CenturyGame: harbor.centurygame.com/zhongtai/%s:%s
-                                    # - AWS: public.ecr.aws/c4n2t7d7/zhongtai/%s:%s
-release_binary_system_arch:         # CHANGELOG 中需要展示的指定系统二进制文件下载地址，默认空，不显示下载链接，例如：
-                                    # - linux/amd64
-                                    # - darwin/amd64
-                                    # - windows/amd64
-release_binary_uri_format:          # 二进制文件下载链接地址格式，格式参数为 remote_dir，zip_file_name，例如：
-                                    # https://zhongtai.s3.amazonaws.com/%s/%s
-release_binary_remote_dir:          # 二进制文件文件存放的相对路径格式，格式参数为 short_name，例如：
-                                    # software/%s
-release_binary_zip_file_name_format: # 二进制文件文件名格式，例如：
-                                    # {name}_{os}_{version_off_v}.zip
+sem_pre_order_by_config: true
+sem_initial_version: v0.0.1 #初始版本号
+sem_master_branch_name: master # 主分支名称
+sem_version_branch_prefix: version/ # version版本开发分支名称前缀
+sem_initial_branch: 0.1 #初始的分支版本，只需major和minor
 
-build:                              # 编译相关配置
-  build_repo_root: .                # 当前目录为 repo 根目录，不指定时默认为当前执行工具的目录
-  build_cmd_dir: cmd                # main.go 文件所在目录，如 cmd/lobby/main.go，cmd 下支持多个 app，默认 cmd
-  build_by_short_name: false        # 是否使用 short_name 作为可执行文件的名称，仅当 cmd 下只有一个 app 时生效，默认 false，以 cmd 下的目录名作为 app 名称
-  build_remove_dest_if_exist: true  # 编译目标目录存在时是否直接删除，默认会弹出询问，默认true
-  build_system_arch:                # 目标编译的 os/arch，例如 linux/amd64、darwin/amd64、windows/amd64，默认空，表示不编译二进制文件
-  build_app:                        # 编译的 app 名称，如不指定，则会遍历 cmd 下所有 app，默认空
-  build_extra:                      # 编译命令，ldflags 之类的信息，默认空
-  build_mod:                        # mod 信息，支持 vendor 方式，但 vendor 应该提前下载好，工具目前不会自动下载 vendor，默认空
-  build_production: true            # 是否生成模式，生成模式会激活-s -w gcflags  asmflags trimpath，默认 true
-  build_enable_cgo: false           # 是否激活cgo，默认false
-  build_silent: false               # 是否静默编译，不打印日志信息，默认false
-  build_local_system_arch: false    # 是否只编译当前系统架构，默认false
-  build_version: tag                # 编译文件名 version 规则，默认空，有如下三种参数：
-                                    # tag 自动根据 sembump 规则获取当前分支最新 tag
-                                    # git 获取当前分支最新的 git 提交版本号
-                                    # 空  目录不包含版本号信息
+commit_replace: # commit信息替换，替换一些关键的但是书写错误的commit message
+release_docker_hub: # docker文件的路径格式
+  - CenturyGame: harbor.centurygame.com/zhongtai/%s:%s
+release_binary_system_arch: # 二进制文件不同系统对应的下载名字
+release_binary_uri_format: # 二进制文件存放路径,remote_dir,zip_file_name
+release_binary_remote_dir: software/%s # remote_dir: 二进制文件文件存放的相对路径,short_name
+release_binary_zip_file_name_format: "{name}_{os}_{version_off_v}.zip" # zip_file_name: 二进制文件文件名
 
-git:                                # git 相关的配置参数
-  file_ssh_rsa:                      # ssh rsa文件路径，默认.ssh/id_rsa，即 ~/.ssh/id_rsa。若为相对路径，则为home下的相对路径，否则直接为绝对路径
-  ssh_password:                     # ssh rsa密码 ，默认空
+build:
+  build_repo_root: . #当前目录为repo根目录，不指定时默认为当前执行工具的目录
+  build_cmd_dir: cmd # app main文件所在目录，如cmd/lobby/main.go，cmd下支持多个app,默认cmd
+  build_by_short_name: true # 是否使用short_name作为可执行文件的名称，仅当cmd下只有一个app时时生效,默认false，以cmd下的目录名作为app名称
+  build_remove_dest_if_exist: true # 编译目标目录存在时是否直接删除，默认会弹出询问，默认true
+  build_system_arch: # 目标编译的os/arch，默认linux/amd64,darwin/amd64,windows/amd64
+  build_app: #编译的app名称，如不指定，则会便于cmd下所有app，默认空
+  build_extra: #编译命令，ldflags之类的信息，默认空
+  build_mod: #mod信息，支持vendor方式，但vendor应该提前下载好，工具目前不会自动下载vendor，默认空
+  build_production: true #是否生成模式，生成模式会激活-s -w gcflags  asmflags trimpath，默认true
+  build_enable_cgo: false #是否激活cgo，默认false
+  build_silent: false #是否静默编译，不打印日志信息，默认false
+  build_local_system_arch: false #是否只编译当前系统架构，默认false
+  build_version: tag # tag则会自动根据sembump规则获取当前分支最新tag，git则会获取当前分支最新的git提交版本号，留空则目录不包含版本号信息,默认空
+pack:
+  pack_os_mapping: #pack的目录或者文件名中含有{OS}时会根据实际的os名称做一层映射，protokitgo遗留问题
+  pack_prefix: # pack目标文件的prefix，只有一级文件或者目录添加该前缀
+  pack_dst: # pack目标根路径
+  pack_src_root: #源文件根目录，不指定时默认为当前执行工具的目录
+  pack_src: #  需要额外pack的目录；pack 映射，源文件 ：目标文件(可以为绝对路径，如为相对路径，则会拼接pack_src_root)，目前文件地址是相对于pack_dst的地址
 
-pack:                               # 打包相关参数
-  pack_os_mapping:                  # pack 的目录或者文件名中含有{OS}时会根据实际的 os 名称做一层映射，protokitgo 遗留问题
-    - darwin: osx
-    - linux: linux
-    - windows: win
-  pack_prefix:                       # pack 目标文件的 prefix，只有一级文件或者目录添加该前缀
-  pack_dst:                         # pack 目标根路径
-  pack_src_root:                    # 源文件根目录，不指定时默认为当前执行工具的目录
-  pack_src:                         # 需要额外打包的目录映射关系，源文件 ：目标文件(可以为绝对路径，如为相对路径，则会拼接pack_src_root)，目前文件地址是相对于pack_dst的地址
-                                    #  - sdk: sdk
-                                    #  - bin/{os}: bin/{os}
-                                    #  - example: example
 
-chglog:                             # CHANGELOG 文件上传到指定仓库的相关配置
-  change_log_ssh_url:               # 管理 CHANGELOG 版本的仓库地址[ssh]，为空则不同步，例如: git@bitbucket.org:funplus/devcenter-site.git
-  change_log_path: content/zh/      # CHANGELOG 文件存放路径，相对路径
-  change_log_title_format:          # log 文件的文件头
-  change_log_menus_title_format:    # menus文件的文件头
-  change_log_changelog_title:       # CHANGELOG 文件的标题
+chglog:
+  change_log_ssh_url: git@gitlab.funplus.io:devcenter/devcenter-site.git # 管理changelog版本的menus所在git地址，默认不同步
+  change_log_path: content/zh/  # release文件存放路径
 
-storages:                           # 云存储支持
-  endpoint: us-east-2               # 云存储 endpoint ,内部会针对 aws 自动做转换
-  access_key_id: your-access_key_id
-  secret_access_key: your-secret_access_key
-  bucket: zhongtai
-  prefix: assets
-  enable: true
-  name: s3
-  dry_run: false
-  parallel: 64
-  verify_before_upload: true
-  verify_after_upload: true
