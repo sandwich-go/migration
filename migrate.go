@@ -230,17 +230,17 @@ func (g *migrate) createDatabaseIfNotExists() (err error) {
 	return
 }
 
-func (g *migrate) generateRevisionScript(submitComment string) (err error) {
+func (g *migrate) generateRevisionScript(_ string) (err error) {
 	g.logger.Info("execute flask db migrate...")
 	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "execute flask db migrate", ", output:\n", string(output))
 	}()
-	var message string
-	if len(submitComment) > 0 {
-		message = fmt.Sprintf(`--message="%s"`, submitComment)
-	}
-	output, err = g.Command(g.flaskEnv(), "flask", "db", "migrate", message)
+
+	message := fmt.Sprintf(`--message=%s`, fmt.Sprintf("%s_%d", g.conf.GetCommitID(), time.Now().Unix())) // 用时"间戳+CommitID"作为本次migrate的提交内容(因为无法支持中文，且提交内容对用户无用)
+	revisionId := fmt.Sprintf(`--rev-id=%s`, g.conf.GetCommitID())                                        // 用CommitID作为本次migrate的版本号
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "migrate", message, revisionId)
 	if err != nil {
 		if strings.Contains(err.Error(), dbNotUpToDate) {
 			g.logger.WarnWithFlag(dbNotUpToDate)
