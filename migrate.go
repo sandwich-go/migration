@@ -80,7 +80,7 @@ func (g *migrate) flaskEnv() string {
 }
 
 func (g *migrate) migrationBuildDir() (migrationBuildDir string) {
-	return filepath.Join(g.conf.GetScriptRoot(), g.conf.GetCommitID())
+	return g.conf.GetScriptRoot()
 }
 
 func (g *migrate) Generate(opts ...GenerateConfOption) error {
