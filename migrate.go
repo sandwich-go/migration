@@ -237,6 +237,18 @@ func (g *migrate) generateRevisionScript(_ string) (err error) {
 		g.logger.InfoWithFlag(err, "execute flask db migrate", ", output:\n", string(output))
 	}()
 
+	// 检查是否有migrations/versions目录，versions目录为空的时候，git不会上传空目录
+	// 需要手动创建一次 以免migrate报错
+	// 检查目录是否存在
+	dirPath := "./migrations/versions"
+	_, err = os.Stat(dirPath)
+	if os.IsNotExist(err) {
+		err = os.Mkdir(dirPath, 0755)
+		if err != nil {
+			return
+		}
+	}
+
 	message := fmt.Sprintf(`--message=%s`, fmt.Sprintf("%s_%d", g.conf.GetCommitID(), time.Now().Unix())) // 用时"间戳+CommitID"作为本次migrate的提交内容(因为无法支持中文，且提交内容对用户无用)
 	revisionId := fmt.Sprintf(`--rev-id=%s`, g.conf.GetCommitID())                                        // 用CommitID作为本次migrate的版本号
 
@@ -412,10 +424,11 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err erro
 			if err != nil {
 				return
 			}
-			output, err = g.deleteAlembicVersionUpdateAndInsertContent(output)
-			if err != nil {
-				return
-			}
+			// 自动构建 本地迁移库是一个 需要一直往里面写入migrate版本号
+			//output, err = g.deleteAlembicVersionUpdateAndInsertContent(output)
+			//if err != nil {
+			//	return
+			//}
 		}
 		err = xos.FilePutContents(filePath, output)
 		if err != nil {
