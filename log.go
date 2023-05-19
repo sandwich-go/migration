@@ -3,9 +3,9 @@ package migration
 import "log"
 
 const (
-	warningFlag = "⚠️⚠️⚠️, waring! "
-	successFlag = "✅✅✅, success! "
-	failedFlag  = "❌❌❌, failed! "
+	warningFlag = "⚠️ Waring! "
+	successFlag = "✅ Success! "
+	failedFlag  = "❌ Failed! "
 	logPrefix   = "[migration] "
 )
 

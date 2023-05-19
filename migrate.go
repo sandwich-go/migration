@@ -80,7 +80,7 @@ func (g *migrate) flaskEnv() string {
 }
 
 func (g *migrate) migrationBuildDir() (migrationBuildDir string) {
-	return filepath.Join(g.conf.GetScriptRoot(), g.conf.GetCommitID())
+	return g.conf.GetScriptRoot()
 }
 
 func (g *migrate) Generate(opts ...GenerateConfOption) error {
@@ -230,17 +230,29 @@ func (g *migrate) createDatabaseIfNotExists() (err error) {
 	return
 }
 
-func (g *migrate) generateRevisionScript(submitComment string) (err error) {
+func (g *migrate) generateRevisionScript(_ string) (err error) {
 	g.logger.Info("execute flask db migrate...")
 	var output []byte
 	defer func() {
 		g.logger.InfoWithFlag(err, "execute flask db migrate", ", output:\n", string(output))
 	}()
-	var message string
-	if len(submitComment) > 0 {
-		message = fmt.Sprintf(`--message="%s"`, submitComment)
+
+	// 检查是否有migrations/versions目录，versions目录为空的时候，git不会上传空目录
+	// 需要手动创建一次 以免migrate报错
+	// 检查目录是否存在
+	dirPath := "./migrations/versions"
+	_, err = os.Stat(dirPath)
+	if os.IsNotExist(err) {
+		err = os.Mkdir(dirPath, 0755)
+		if err != nil {
+			return
+		}
 	}
-	output, err = g.Command(g.flaskEnv(), "flask", "db", "migrate", message)
+
+	message := fmt.Sprintf(`--message=%s`, fmt.Sprintf("%s_%d", g.conf.GetCommitID(), time.Now().Unix())) // 用时"间戳+CommitID"作为本次migrate的提交内容(因为无法支持中文，且提交内容对用户无用)
+	revisionId := fmt.Sprintf(`--rev-id=%s`, g.conf.GetCommitID())                                        // 用CommitID作为本次migrate的版本号
+
+	output, err = g.Command(g.flaskEnv(), "flask", "db", "migrate", message, revisionId)
 	if err != nil {
 		if strings.Contains(err.Error(), dbNotUpToDate) {
 			g.logger.WarnWithFlag(dbNotUpToDate)
@@ -412,10 +424,11 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err erro
 			if err != nil {
 				return
 			}
-			output, err = g.deleteAlembicVersionUpdateContent(output)
-			if err != nil {
-				return
-			}
+			// 自动构建 本地迁移库是一个 需要一直往里面写入migrate版本号
+			//output, err = g.deleteAlembicVersionUpdateAndInsertContent(output)
+			//if err != nil {
+			//	return
+			//}
 		}
 		err = xos.FilePutContents(filePath, output)
 		if err != nil {
@@ -450,15 +463,17 @@ func (g *migrate) generateUpdateDDLFile(content []byte) (updateContent []byte, e
 	return
 }
 
-func (g *migrate) deleteAlembicVersionUpdateContent(content []byte) (ddlContent []byte, err error) {
+func (g *migrate) deleteAlembicVersionUpdateAndInsertContent(content []byte) (ddlContent []byte, err error) {
 	c := strings.TrimSpace(string(content))
 	cs := strings.Split(c, ";")
 	var contentAfterReplaced string
 	for i := len(cs) - 1; i >= 0; i-- {
 		checkContent := cs[i]
-		if strings.Contains(checkContent, updateAlembicVersionPerfix) {
+		if strings.Contains(checkContent, updateAlembicVersionPrefix) {
 			contentAfterReplaced = strings.Replace(c, checkContent, "", -1)
-			break
+		}
+		if strings.Contains(checkContent, insertAlembicVersionPrefix) {
+			contentAfterReplaced = strings.Replace(c, checkContent, "", -1)
 		}
 	}
 	return []byte(contentAfterReplaced), nil

@@ -15,5 +15,6 @@ const (
 	dbNotUpToDate              = "Target database is not up to date"
 	SchemaNoChanges            = "No changes in schema detected"
 	mysqlDSNPrefix             = "mysql://"
-	updateAlembicVersionPerfix = "UPDATE alembic_version"
+	updateAlembicVersionPrefix = "UPDATE alembic_version"
+	insertAlembicVersionPrefix = "INSERT INTO alembic_version"
 )
