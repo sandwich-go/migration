@@ -412,7 +412,7 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err erro
 			if err != nil {
 				return
 			}
-			output, err = g.deleteAlembicVersionUpdateContent(output)
+			output, err = g.deleteAlembicVersionUpdateAndInsertContent(output)
 			if err != nil {
 				return
 			}
@@ -450,15 +450,17 @@ func (g *migrate) generateUpdateDDLFile(content []byte) (updateContent []byte, e
 	return
 }
 
-func (g *migrate) deleteAlembicVersionUpdateContent(content []byte) (ddlContent []byte, err error) {
+func (g *migrate) deleteAlembicVersionUpdateAndInsertContent(content []byte) (ddlContent []byte, err error) {
 	c := strings.TrimSpace(string(content))
 	cs := strings.Split(c, ";")
 	var contentAfterReplaced string
 	for i := len(cs) - 1; i >= 0; i-- {
 		checkContent := cs[i]
-		if strings.Contains(checkContent, updateAlembicVersionPerfix) {
+		if strings.Contains(checkContent, updateAlembicVersionPrefix) {
 			contentAfterReplaced = strings.Replace(c, checkContent, "", -1)
-			break
+		}
+		if strings.Contains(checkContent, insertAlembicVersionPrefix) {
+			contentAfterReplaced = strings.Replace(c, checkContent, "", -1)
 		}
 	}
 	return []byte(contentAfterReplaced), nil
