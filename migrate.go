@@ -105,7 +105,7 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 	}).Catch(func(err xpanic.E) {
 		err = fmt.Errorf("panic as error:%v", err)
 	})
-	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", args)
+	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", HidePassword(args, conf.GetMysqlPassword()))
 	return err
 }
 
