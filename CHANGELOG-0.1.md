@@ -1,3 +1,15 @@
+### v0.1.0-alpha.3 (2023-09-11 15:34:42)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.3
+
+#### 🐛  Bug Fixed
+  * 增加隐藏日志中数据库密码功能 ([da58bdd](https://bitbucket.org/funplus/migration/commits/da58bdd33ddf0277f081989acffbdcedd8366b0f)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-11 15:34:42 &#43;0800 &#43;0800</small>)
+
+#### 🤖  Tools
+  * **sem**: make changelog ([f295d02](https://bitbucket.org/funplus/migration/commits/f295d021505c37f61c901357e7430642c710ea03)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-11 12:59:02 &#43;0800 &#43;0800</small>)
+
 ### v0.1.0-alpha.2 (2023-09-11 12:52:30)
 
 #### 🌎 Downloads
