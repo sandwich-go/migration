@@ -1,3 +1,19 @@
+### v0.1.0-alpha.2 (2023-09-11 12:52:30)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.2
+
+#### 🐛  Bug Fixed
+  * update .sembumprc.yml ([6f6e0dd](https://bitbucket.org/funplus/migration/commits/6f6e0ddafa7fe7f076d0c35dffd885f97b949c4b)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-11 12:52:30 &#43;0800 &#43;0800</small>)
+  * 所有接口通过prepare()进入到migration目录后，最后需要调用prepare()返回的deferFunc()函数返回起始目录 ([9f89051](https://bitbucket.org/funplus/migration/commits/9f890514a989099d1d1a2a7b65cb5b1f159b268d)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-11 12:33:32 &#43;0800 &#43;0800</small>)
+
+#### 🤖  Tools
+  * **sem**: make changelog ([935bee0](https://bitbucket.org/funplus/migration/commits/935bee00594c4053945c2fc71fb42a2d7ef9c7db)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-05-19 21:41:03 &#43;0800 &#43;0800</small>)
+
+#### 💪  Commit
+  * Merge branch 'feature/migration' into version/0.1 ([e19a5ff](https://bitbucket.org/funplus/migration/commits/e19a5ff3984a9f24df50718ae273ffb240313812)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-11 12:33:47 &#43;0800 &#43;0800</small>)
+
 ### v0.1.0-alpha.1 (2023-05-19 21:40:37)
 
 #### 🌎 Downloads
