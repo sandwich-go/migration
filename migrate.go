@@ -134,7 +134,7 @@ func (g *migrate) Command(env string, name string, arg ...string) (output []byte
 	return
 }
 
-func (g *migrate) prepare() (err error) {
+func (g *migrate) prepare() (deferFunc func(), err error) {
 	g.logger.Info("prepare...")
 	var (
 		output []byte
@@ -144,12 +144,9 @@ func (g *migrate) prepare() (err error) {
 		g.logger.InfoWithFlag(err, "prepare", ", dir:", dir, ", file:", g.conf.GetFileName(), ", output:\n", string(output))
 	}()
 	dir = g.migrationBuildDir()
+	deferFunc, err = Chdir(dir)
 	if err != nil {
-		return err
-	}
-	err = os.Chdir(dir)
-	if err != nil {
-		return err
+		return
 	}
 	output, err = g.Command(g.flaskEnv(), "flask", "db", "init")
 	if err != nil {
@@ -161,7 +158,7 @@ func (g *migrate) prepare() (err error) {
 			err = nil
 		}
 	}
-	return err
+	return
 }
 
 func (g *migrate) fetchDsnFromFile() (dsn string, err error) {
@@ -266,7 +263,9 @@ func (g *migrate) generateRevisionScript(_ string) (err error) {
 }
 
 func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
@@ -283,7 +282,9 @@ func (g *migrate) Migrate(submitComment string) (revision Revision, err error) {
 }
 
 func (g *migrate) MigrateOnly(submitComment string) (err error) {
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
@@ -350,12 +351,12 @@ func (g *migrate) ShowLocalRevision(version string) (revision Revision, err erro
 	defer func() {
 		g.logger.InfoWithFlag(err, "show local revision", ", revision:", revision, ", output:\n", string(output))
 	}()
-
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
-
 	if len(version) > 0 {
 		output, err = g.Command(g.flaskEnv(), "flask", "db", "show", version)
 	} else {
@@ -364,7 +365,6 @@ func (g *migrate) ShowLocalRevision(version string) (revision Revision, err erro
 	if err != nil {
 		return
 	}
-
 	var revisions []Revision
 	if revisions, err = parseRevisions(string(output)); err != nil {
 		return
@@ -381,12 +381,12 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	defer func() {
 		g.logger.InfoWithFlag(err, "show remote revision", ", revision:", revision, ", output:\n", string(output))
 	}()
-
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
-
 	output, err = g.Command(g.flaskEnv(), "flask", "db", "current", "--verbose")
 	if err != nil {
 		return
@@ -408,7 +408,9 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err erro
 	defer func() {
 		g.logger.InfoWithFlag(err, "show ddl", ", output:\n", string(output))
 	}()
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
@@ -440,7 +442,10 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool) (ddl string, err erro
 }
 
 func (g *migrate) generateUpdateDDLFile(content []byte) (updateContent []byte, err error) {
-	if err = g.prepare(); err != nil {
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
+	if err != nil {
 		return
 	}
 	// 获取远程数据库的版本号
@@ -485,7 +490,9 @@ func (g *migrate) Upgrade() (err error) {
 	defer func() {
 		g.logger.InfoWithFlag(err, "upgrade", ", output:\n", string(output))
 	}()
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
@@ -499,7 +506,9 @@ func (g *migrate) Downgrade() (err error) {
 	defer func() {
 		g.logger.InfoWithFlag(err, "downgrade", ", output:\n", string(output))
 	}()
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
@@ -513,7 +522,9 @@ func (g *migrate) History() (revisions []Revision, err error) {
 	defer func() {
 		g.logger.InfoWithFlag(err, "history", ", output:\n", string(output))
 	}()
-	err = g.prepare()
+	var deferFunc func()
+	deferFunc, err = g.prepare()
+	defer deferFunc()
 	if err != nil {
 		return
 	}
