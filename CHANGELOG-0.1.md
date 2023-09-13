@@ -1,3 +1,15 @@
+### v0.1.0-alpha.4 (2023-09-13 19:01:10)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.4
+
+#### 🐛  Bug Fixed
+  * showDDL add filter ([17edd66](https://bitbucket.org/funplus/migration/commits/17edd663c397646da012cbd194269bbc69f5abd2)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-13 19:01:10 &#43;0800 &#43;0800</small>)
+
+#### 🤖  Tools
+  * **sem**: make changelog ([fdaaae4](https://bitbucket.org/funplus/migration/commits/fdaaae4e426b04a61ffae215c53ce2dc84608d61)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-11 15:35:33 &#43;0800 &#43;0800</small>)
+
 ### v0.1.0-alpha.3 (2023-09-11 15:34:42)
 
 #### 🌎 Downloads
