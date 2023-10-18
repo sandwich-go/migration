@@ -100,13 +100,14 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 		"--log_level=4",
 	}
 
+	var out = bytes.NewBuffer(nil)
 	var err error
 	xpanic.Try(func() {
-		_, err = xproc.Run(conf.GetProtokitPath(), xproc.WithArgs(args...))
-	}).Catch(func(err xpanic.E) {
-		err = fmt.Errorf("panic as error:%v", err)
+		_, err = xproc.Run(conf.GetProtokitPath(), xproc.WithArgs(args...), xproc.WithStdout(out))
+	}).Catch(func(e xpanic.E) {
+		err = fmt.Errorf("panic as error:%v", e)
 	})
-	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", HidePassword(args, conf.GetMysqlPassword()))
+	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", HidePassword(args, conf.GetMysqlPassword()), ", out:", out.String())
 	return err
 }
 
@@ -247,8 +248,10 @@ func (g *migrate) generateRevisionScript(_ string) (err error) {
 		}
 	}
 
-	message := fmt.Sprintf(`--message=%s`, fmt.Sprintf("%s_%d", g.conf.GetCommitID(), time.Now().Unix())) // 用时"间戳+CommitID"作为本次migrate的提交内容(因为无法支持中文，且提交内容对用户无用)
-	revisionId := fmt.Sprintf(`--rev-id=%s`, g.conf.GetCommitID())                                        // 用CommitID作为本次migrate的版本号
+	// 用时"间戳+CommitID"作为本次migrate的提交内容(因为无法支持中文，且提交内容对用户无用)
+	message := fmt.Sprintf(`--message=%d`, time.Now().Unix())
+	// 用CommitID作为本次migrate的版本号
+	revisionId := fmt.Sprintf(`--rev-id=%s`, g.conf.GetCommitID())
 
 	output, err = g.Command(g.flaskEnv(), "flask", "db", "migrate", message, revisionId)
 	if err != nil {
