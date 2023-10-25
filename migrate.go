@@ -45,10 +45,8 @@ type Migration interface {
 	// Use The --sql option present in several commands performs an ‘offline’ mode migration.
 	// Instead of executing the database commands the SQL statements that need to be executed are printed to the console.
 	// params:
-	// ddlFileName - The name of the generated ddl file
 	// latest      - Write only the latest version of the update to the ddl file
-	// filter      - Filtering of the generated ddl
-	ShowDDL(ddlFileName string, latest bool, filter func(before string) (after string, err error)) (ddl string, err error)
+	ShowDDL(latest bool) (ddl string, err error)
 
 	// Upgrade
 	// Upgrades the database.
@@ -406,7 +404,7 @@ func (g *migrate) ShowDatabaseRevision() (revision Revision, err error) {
 	return revisions[0], nil
 }
 
-func (g *migrate) ShowDDL(ddlFileName string, latest bool, filter func(before string) (after string, err error)) (ddl string, err error) {
+func (g *migrate) ShowDDL(latest bool) (ddl string, err error) {
 	g.logger.Info("show ddl...")
 	var output []byte
 	defer func() {
@@ -422,35 +420,10 @@ func (g *migrate) ShowDDL(ddlFileName string, latest bool, filter func(before st
 	if err != nil {
 		return
 	}
-	var migrationBuildDir = g.migrationBuildDir()
-	if len(ddlFileName) > 0 {
-		filePath := filepath.Join(migrationBuildDir, ddlFileName)
-		if latest {
-			output, err = g.generateUpdateDDLFile(output)
-			if err != nil {
-				return
-			}
-			// 自动构建 本地迁移库是一个 需要一直往里面写入migrate版本号 这里不能删除
-			//output, err = g.deleteAlembicVersionUpdateAndInsertContent(output)
-			//if err != nil {
-			//	return
-			//}
-			// 过滤
-			if filter != nil {
-				before := strings.TrimSpace(string(output))
-				g.logger.Info("ddl filter, before:", before)
-				var after string
-				after, err = filter(before)
-				if err != nil {
-					return
-				}
-				g.logger.Info("ddl filter, after:", after)
-				output = []byte(after)
-			}
-		}
-		err = xos.FilePutContents(filePath, output)
+	if latest {
+		output, err = g.generateUpdateDDLFile(output)
 		if err != nil {
-			return
+			return "", err
 		}
 	}
 	ddl = string(output)
