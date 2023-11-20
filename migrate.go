@@ -8,7 +8,6 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/sandwich-go/boost/xos"
 	"github.com/sandwich-go/boost/xpanic"
-	"github.com/sandwich-go/boost/xproc"
 	"log"
 	"os"
 	"os/exec"
@@ -98,14 +97,14 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 		"--log_level=4",
 	}
 
-	var out = bytes.NewBuffer(nil)
+	var out []byte
 	var err error
 	xpanic.Try(func() {
-		_, err = xproc.Run(conf.GetProtokitPath(), xproc.WithArgs(args...), xproc.WithStdout(out))
+		out, err = g.Command("", conf.GetProtokitPath(), args...)
 	}).Catch(func(e xpanic.E) {
 		err = fmt.Errorf("panic as error:%v", e)
 	})
-	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", HidePassword(args, conf.GetMysqlPassword()), ", out:", out.String())
+	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", HidePassword(args, conf.GetMysqlPassword()), ", out:", string(out))
 	return err
 }
 
