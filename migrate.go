@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/go-sql-driver/mysql"
 	"github.com/sandwich-go/boost/xos"
@@ -27,6 +28,8 @@ type Migration interface {
 	// Create database if not exists.
 	// Generate script revision and diff from remote database for update SQL DDL.
 	Migrate(submitComment string) (revision Revision, err error)
+
+	ShowHints() (map[string]string, error)
 
 	// MigrateOnly
 	// "flask db migrate" only
@@ -106,6 +109,33 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 	})
 	g.logger.InfoWithFlag(err, "generate migration python script file", ", args:", HidePassword(args, conf.GetMysqlPassword()), ", out:", string(out))
 	return err
+}
+
+func (g *migrate) ShowHints() (map[string]string, error) {
+	deferFunc, err := Chdir(g.migrationBuildDir())
+	defer func() {
+		if deferFunc != nil {
+			deferFunc()
+		}
+	}()
+	if err != nil {
+		return nil, err
+	}
+	hintsPath := filepath.Join(g.migrationBuildDir(), "hints.json")
+	if !xos.ExistsFile(hintsPath) {
+		return nil, err
+	}
+	var bs []byte
+	bs, err = xos.FileGetContents(hintsPath)
+	if err != nil {
+		return nil, err
+	}
+	if len(bs) == 0 {
+		return nil, err
+	}
+	var out map[string]string
+	err = json.Unmarshal(bs, &out)
+	return out, err
 }
 
 func (g *migrate) Command(env string, name string, arg ...string) (output []byte, err error) {
