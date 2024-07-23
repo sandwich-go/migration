@@ -1,3 +1,51 @@
+### v0.1.0-alpha.9 (2024-07-23 15:11:02)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.9
+
+#### 🛠  Refactor
+  * add log ([616b26d](https://bitbucket.org/funplus/migration/commits/616b26d22d86196f69c8b3fd70d8e7cc14ef9c87)) (<small>[Daming Yang](daming.yang@centurygame.com)@2024-07-23 15:11:02 &#43;0800 &#43;0800</small>)
+
+### v0.1.0-alpha.8 (2024-03-04 13:12:25)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.8
+
+#### 🚀  New Feature
+  * 增加获取 hints 接口 ([22cf717](https://bitbucket.org/funplus/migration/commits/22cf717c6e87bec7057c343a30b80cc566f47350)) (<small>[huangqing.zhu](huangqing.zhu@centurygame.com)@2024-03-04 13:12:25 &#43;0800 &#43;0800</small>)
+
+### v0.1.0-alpha.7 (2023-11-20 12:33:04)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.7
+
+#### 🐛  Bug Fixed
+  * 当migration执行报错，输出日志 ([6b8020c](https://bitbucket.org/funplus/migration/commits/6b8020c6f7f46efed05ab4278a7bb39fbf10ca3d)) (<small>[huangqing.zhu](huangqing.zhu@centurygame.com)@2023-11-20 12:33:04 &#43;0800 &#43;0800</small>)
+
+### v0.1.0-alpha.6 (2023-10-25 18:30:01)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.6
+
+#### 🛠  Refactor
+  * show ddl 移除文件写入 ([1482bfc](https://bitbucket.org/funplus/migration/commits/1482bfcfa26d17bfb0b266f192cda26724c5b913)) (<small>[祝黄清](huangqing.zhu@centurygame.com)@2023-10-25 18:30:01 &#43;0800 &#43;0800</small>)
+
+### v0.1.0-alpha.5 (2023-10-18 10:48:46)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.5
+
+#### 🐛  Bug Fixed
+  * migration message ([163e043](https://bitbucket.org/funplus/migration/commits/163e0432c314a2b182ee46bbd89732b0c1178ce0)) (<small>[祝黄清](huangqing.zhu@centurygame.com)@2023-10-18 10:48:46 &#43;0800 &#43;0800</small>)
+
+#### 🤖  Tools
+  * **sem**: make changelog ([d242261](https://bitbucket.org/funplus/migration/commits/d2422610c72ee8b2f5078bcc91ca8b57f4999441)) (<small>[zhagnxujun](xujun.zhang@centurygame.com)@2023-09-13 19:02:12 &#43;0800 &#43;0800</small>)
+
 ### v0.1.0-alpha.4 (2023-09-13 19:01:10)
 
 #### 🌎 Downloads
