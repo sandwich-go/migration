@@ -85,8 +85,8 @@ func (g *migrate) migrationBuildDir() (migrationBuildDir string) {
 }
 
 func (g *migrate) Generate(opts ...GenerateConfOption) error {
-	g.logger.Info("generate migration python script file...")
 	conf := NewGenerateConf(opts...)
+	g.logger.Info(fmt.Sprintf("generate migration python script file, protokitgo path:%s", conf.GetProtokitPath()))
 	args := []string{
 		"migration",
 		"--dir", g.migrationBuildDir(),
