@@ -1,3 +1,15 @@
+### v0.1.0-alpha.10 (2024-08-07 11:04:49)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.10
+
+#### 🧪  Testing
+  * add log for Chdir ([e59aacd](https://bitbucket.org/funplus/migration/commits/e59aacd5d290f79e8874eb6a81372a4d29ee2cc1)) (<small>[Daming Yang](daming.yang@centurygame.com)@2024-08-07 11:04:49 &#43;0800 &#43;0800</small>)
+
+#### 🤖  Tools
+  * **sem**: make changelog ([f5d34be](https://bitbucket.org/funplus/migration/commits/f5d34bee6024f75fd3d408a0388cce7d1771e06c)) (<small>[Daming Yang](daming.yang@centurygame.com)@2024-07-23 15:11:16 &#43;0800 &#43;0800</small>)
+
 ### v0.1.0-alpha.9 (2024-07-23 15:11:02)
 
 #### 🌎 Downloads
