@@ -112,7 +112,7 @@ func (g *migrate) Generate(opts ...GenerateConfOption) error {
 }
 
 func (g *migrate) ShowHints() (map[string]string, error) {
-	deferFunc, err := Chdir(g.migrationBuildDir())
+	deferFunc, err := Chdir(g.migrationBuildDir(), g.logger)
 	defer func() {
 		if deferFunc != nil {
 			deferFunc()
@@ -173,7 +173,7 @@ func (g *migrate) prepare() (deferFunc func(), err error) {
 		g.logger.InfoWithFlag(err, "prepare", ", dir:", dir, ", file:", g.conf.GetFileName(), ", output:\n", string(output))
 	}()
 	dir = g.migrationBuildDir()
-	deferFunc, err = Chdir(dir)
+	deferFunc, err = Chdir(dir, g.logger)
 	if err != nil {
 		return
 	}
