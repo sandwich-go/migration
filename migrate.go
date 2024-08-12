@@ -173,12 +173,6 @@ func (g *migrate) prepare() (deferFunc func(), err error) {
 		g.logger.InfoWithFlag(err, "prepare", ", dir:", dir, ", file:", g.conf.GetFileName(), ", output:\n", string(output))
 	}()
 	dir = g.migrationBuildDir()
-	if _, err = os.Stat(dir); os.IsNotExist(err) {
-		err = os.Mkdir(dir, 0755)
-		if err != nil {
-			return
-		}
-	}
 	deferFunc, err = Chdir(dir, g.logger)
 	if err != nil {
 		return
