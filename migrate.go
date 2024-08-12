@@ -266,7 +266,8 @@ func (g *migrate) generateRevisionScript(_ string) (err error) {
 	// 检查是否有migrations/versions目录，versions目录为空的时候，git不会上传空目录
 	// 需要手动创建一次 以免migrate报错
 	// 检查目录是否存在
-	dirPath := "./migrations/versions"
+	migrationBuildDir := g.migrationBuildDir()
+	dirPath := filepath.Join(migrationBuildDir, "migrations", "versions")
 	_, err = os.Stat(dirPath)
 	if os.IsNotExist(err) {
 		err = os.Mkdir(dirPath, 0755)
