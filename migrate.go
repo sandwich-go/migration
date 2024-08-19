@@ -148,6 +148,10 @@ func (g *migrate) Command(env string, name string, arg ...string) (output []byte
 			cmd.Env = append(cmd.Env, env)
 		}
 
+		if dir := g.migrationBuildDir(); xos.ExistsDir(dir) {
+			cmd.Dir = dir // instead of chdir
+		}
+
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 		err = cmd.Run()
