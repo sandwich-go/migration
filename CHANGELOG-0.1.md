@@ -1,3 +1,42 @@
+### v0.1.0-alpha.15 (2025-04-30 12:14:27)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.15
+
+#### 🛠  Refactor
+  * getwd fail sometimes ([fda8d00](https://bitbucket.org/funplus/migration/commits/fda8d00d2d40825a6a1da4772617016bc47d8dde)) (<small>[Daming Yang](daming.yang@centurygame.com)@2025-04-30 12:14:27 &#43;0800 &#43;0800</small>)
+
+### v0.1.0-alpha.14 (2024-08-19 11:52:33)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.14
+
+### v0.1.0-alpha.13 (2024-08-12 18:19:02)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.13
+
+#### 🛠  Refactor
+  * 移除无用代码 ([900f36f](https://bitbucket.org/funplus/migration/commits/900f36fecfda424bbbc71b52a54c452368c3aa72)) (<small>[huangqing.zhu](huangqing.zhu@centurygame.com)@2024-08-12 18:19:02 &#43;0800 &#43;0800</small>)
+
+### v0.1.0-alpha.12 (2024-08-12 16:45:58)
+
+#### 🌎 Downloads
+  * Docker : 
+	* **CenturyGame**: harbor.centurygame.com/zhongtai/migration:0.1.0-alpha.12
+
+#### 🐛  Bug Fixed
+  * 不使用相对目录 ([fa406d9](https://bitbucket.org/funplus/migration/commits/fa406d98dba24b737ce4b40c45ac8639f957ad0a)) (<small>[huangqing.zhu](huangqing.zhu@centurygame.com)@2024-08-12 13:05:38 &#43;0800 &#43;0800</small>)
+
+#### 🛠  Refactor
+  * 如果不存在migration目录，则创建 ([40f0da2](https://bitbucket.org/funplus/migration/commits/40f0da26f3072a28255d95b98f27e8f9d139ce19)) (<small>[huangqing.zhu](huangqing.zhu@centurygame.com)@2024-08-12 16:45:58 &#43;0800 &#43;0800</small>)
+
+#### 🤖  Tools
+  * **sem**: make changelog ([210c427](https://bitbucket.org/funplus/migration/commits/210c42722d7bfbc9b94fb3f73070684af54865c5)) (<small>[Daming Yang](daming.yang@centurygame.com)@2024-08-07 11:05:06 &#43;0800 &#43;0800</small>)
+
 ### v0.1.0-alpha.10 (2024-08-07 11:04:49)
 
 #### 🌎 Downloads
